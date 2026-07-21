@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# DO NOT ignore your lockfile! Keep the one you use:
+# Keep package-lock.json (if using npm)
+# Keep yarn.lock (if using yarn)
+# Keep pnpm-lock.yaml (if using pnpm)
+
+# Production & Build Outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & Local Secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+*.pem
+
+# Local Uploads & Temp Files
+uploads/
+public/uploads/
+temp/
+
+# Logs & Debug
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
