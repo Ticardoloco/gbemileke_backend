@@ -57,3 +57,26 @@ export async function protect(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ message: "Not authorized, invalid token", error });
   }
 }
+
+/**
+ * @desc    Restrict route access to specific user roles
+ * @example authorize("admin", "doctor")
+ */
+export function authorize(...allowedRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    // req.user is populated by the 'protect' middleware
+    if (!req.user || !req.user.role) {
+      return res.status(403).json({
+        message: "User role is missing or not authorized.",
+      });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: `User role '${req.user.role}' is not authorized to access this route.`,
+      });
+    }
+
+    next();
+  };
+}

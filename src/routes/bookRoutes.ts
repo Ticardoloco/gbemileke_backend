@@ -26,7 +26,7 @@ const router = Router();
  * @openapi
  * /api/bookings:
  *   post:
- *     summary: Book a new appointment
+ *     summary: Book a new appointment (Requires active paid patient card for selected specialty)
  *     tags: [Bookings]
  *     security:
  *       - BearerAuth: []
@@ -70,9 +70,11 @@ const router = Router();
  *       201:
  *         description: Appointment booked successfully
  *       400:
- *         description: Missing fields or invalid request data
+ *         description: Missing required fields or invalid request data
  *       401:
  *         description: Not authorized
+ *       403:
+ *         description: Forbidden - Patient does not have an active registered/paid card for this specialty
  *       500:
  *         description: Internal server error
  *

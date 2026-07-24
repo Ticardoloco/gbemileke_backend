@@ -1,4 +1,4 @@
-import User, { UserGender } from "../models/userModel.js";
+import User, { UserGender, UserRole } from "../models/userModel.js";
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary"; 
@@ -227,6 +227,48 @@ export async function updateUserProfile(req: Request, res: Response) {
   }
 }
 
+/**
+ * @desc    Update user role by ID
+ * @route   PATCH /api/users/:id/role
+ * @access  Private (Admin)
+ */
+export async function updateUserRole(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const { role } = req.body as { role: UserRole | string };
+
+    const validRoles = ["patient", "practitioner", "admin"];
+
+    if (!role || !validRoles.includes(role.toLowerCase().trim())) {
+      return res.status(400).json({
+        message: `Invalid role. Allowed values: ${validRoles.join(", ")}`,
+      });
+    }
+
+    const normalizedRole = role.toLowerCase().trim() as UserRole;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { $set: { role: normalizedRole } },
+      { returnDocument: "after", runValidators: true }
+    ).select("-passwordHash");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    return res.status(200).json({
+      message: `User role updated to '${normalizedRole}' successfully.`,
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to update user role.",
+      error: error.message || error,
+    });
+  }
+}
+
 
 export async function deleteUserProfile(req: Request, res: Response) {
   try {
@@ -284,5 +326,6 @@ export default {
     getUserProfile,
     getUserProfiles,
     updateUserProfile,
+    updateUserRole,
     deleteUserProfile
 }

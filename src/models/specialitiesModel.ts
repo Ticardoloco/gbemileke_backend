@@ -7,7 +7,8 @@ export type SpecialtySlug =
   | "stroke-recovery"
   | "bone-setting"
   | "infertility"
-  | "infection-treatment";
+  | "infection-treatment"
+  | "low-sperm-count";
 
 export interface ISpecialities extends Document {
   slug: SpecialtySlug;
@@ -28,7 +29,7 @@ const SpecialitySchema: Schema<ISpecialities> = new Schema<ISpecialities> (
             required: true,
             unique: true,
             lowercase: true,
-            enum: [ "anti-natal", "post-natal", "labor-and-delivery", "stroke-recovery", "bone-setting", "infertility", "infection-treatment"],
+            enum: [ "anti-natal", "post-natal", "labor-and-delivery", "stroke-recovery", "bone-setting", "infertility", "infection-treatment", "low-sperm-count"],
         },
 
         name:{

@@ -7,8 +7,9 @@ import {
   getUserProfiles,
   updateUserProfile,
   deleteUserProfile,
+  updateUserRole,
 } from "../controllers/userControllers.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { authorize, protect } from "../middleware/authMiddleware.js";
 import { upload } from "../utils/cloudinary.js";
 
 const router = Router();
@@ -180,6 +181,50 @@ router.put("/profile", protect, upload.single("avatar"), updateUserProfile);
  *         description: Internal Server Error
  */
 router.delete("/profile", protect, deleteUserProfile);
+
+/**
+ * @openapi
+ * /api/user/{id}/role:
+ *   patch:
+ *     summary: Update user role by ID (Admin only)
+ *     tags: [Authentication & Users]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User MongoDB ID
+ *         example: "6a60e167d67256bf168fdec5"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role]
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [patient, practitioner, admin]
+ *                 example: "practitioner"
+ *     responses:
+ *       200:
+ *         description: User role updated successfully
+ *       400:
+ *         description: Invalid role provided
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Admin role)
+ *       404:
+ *         description: User record not found
+ *       500:
+ *         description: Internal Server Error
+ */
+router.patch("/:id/role", protect, authorize("admin"), updateUserRole);
 
 /**
  * @openapi
