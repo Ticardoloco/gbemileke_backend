@@ -52,7 +52,7 @@ export async function initializeCardPayment(req: Request, res: Response) {
       {
         email: userEmail,
         amount: DEFAULT_CARD_FEE * 100, // Paystack expects amount in Kobo
-        callback_url: `${process.env["FRONTEND_URL"]}/patient/card/verify`,
+        callback_url: `${process.env["FRONTEND_URL"]}/patient-card`,
         metadata: {
           userId: userId?.toString(),
           specialty,

@@ -18,7 +18,7 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: "http://localhost:5001",
+        url: "http://localhost:5002",
         description: "Local Development Server",
       },
     ],
@@ -67,5 +67,5 @@ export function setupSwagger(app: Express): void {
     res.json(swaggerSpec);
   });
 
-  console.log("🏥 Gbemileke Hospital Docs active at: http://localhost:5001/docs");
+  console.log("🏥 Gbemileke Hospital Docs active at: http://localhost:5002/docs");
 }

@@ -3,19 +3,35 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary"; 
 import bcrypt from "bcrypt";
-import { uploadToCloudinary } from "../utils/cloudinary.js"; // ✅ FIX: Added .js extension helper
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 
-
-// Helper to safely fetch and verify the JWT Secret
 const getJwtSecret = (): string => {
   const secret = process.env["JWT_SECRET"];
   if (!secret) {
-    throw new Error(
-      "FATAL ERROR: JWT_SECRET is not defined in the environment.",
-    );
+    throw new Error("FATAL ERROR: JWT_SECRET is not defined in the environment.");
   }
   return secret;
 };
+
+// Helper to project the complete user object consistently across endpoints
+const sanitizeUser = (user: any) => ({
+  id: String(user._id),
+  fullName: user.fullName,
+  email: user.email,
+  phoneNumber: user.phoneNumber || "",
+  gender: user.gender || null,
+  role: user.role,
+  avatar: user.avatar || "",
+  address: user.address || {
+    street: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    country: "Nigeria",
+  },
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
 
 export async function registerUser(req: Request, res: Response) {
   try {
@@ -27,7 +43,7 @@ export async function registerUser(req: Request, res: Response) {
     };
 
     if (!fullName || !email || !password) {
-      return res.status(400).json({ message: "All field are required" });
+      return res.status(400).json({ message: "All fields are required" });
     }
 
     const existing = await User.findOne({ email });
@@ -59,12 +75,7 @@ export async function registerUser(req: Request, res: Response) {
     return res.status(201).json({
       message: "User created successfully",
       token,
-      user: {
-        id: String(user._id),
-        fullName,
-        email,
-        gender: user.gender || null,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error", error });
@@ -99,15 +110,11 @@ export async function loginUser(req: Request, res: Response) {
       { expiresIn: "7d" },
     );
 
+    // FIX: Send full user payload (including address, avatar, phoneNumber) on login
     return res.status(200).json({
       message: "User logged in successfully",
       token,
-      user: {
-        id: String(user._id),
-        fullName: user.fullName,
-        email: user.email,
-        gender: user.gender || null,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error", error });
@@ -122,7 +129,7 @@ export async function logoutUser(req: Request, res: Response) {
       return res.status(400).json({ message: "User not found" });
     }
 
-    return res.status(200).json({ message: "User logged out successflly" });
+    return res.status(200).json({ message: "User logged out successfully" });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error", error });
   }
@@ -132,18 +139,21 @@ export async function getUserProfile(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: "Not authorized" });
   }
-  return res.json(req.user);
+  return res.json({ user: sanitizeUser(req.user) });
 }
 
-export async function getUserProfiles(req:Request, res:Response) {
-    try {
-        const users = await User.find().select("-passwordHash");
-        return res.status(200).json({message: "Users Retreived successfully", count: users.length, users})
-    } catch (error) {
-        return res.status(500).json({ message: "Internal Server Error", error });
-    }
+export async function getUserProfiles(req: Request, res: Response) {
+  try {
+    const users = await User.find().select("-passwordHash");
+    return res.status(200).json({
+      message: "Users retrieved successfully",
+      count: users.length,
+      users: users.map(sanitizeUser),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error", error });
+  }
 }
-
 
 export async function updateUserProfile(req: Request, res: Response) {
   try {
@@ -153,11 +163,12 @@ export async function updateUserProfile(req: Request, res: Response) {
       return res.status(401).json({ message: "Not authorized" });
     }
 
-    const { fullName, phoneNumber, gender, address } = req.body as {
+    const { fullName, phoneNumber, gender, address, avatar } = req.body as {
       fullName?: string;
       phoneNumber?: string;
       gender?: string;
-      address?: string; 
+      address?: any;
+      avatar?: string;
     };
 
     const updateData: Record<string, any> = {};
@@ -165,7 +176,6 @@ export async function updateUserProfile(req: Request, res: Response) {
     if (fullName) updateData.fullName = fullName;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
 
-    // Validate gender against allowed enum values
     if (gender) {
       const normalizedGender = gender.toLowerCase().trim() as UserGender;
       if (["male", "female", "other"].includes(normalizedGender)) {
@@ -177,23 +187,41 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     }
 
-    // 1. Image buffer upload handoff
+    // 1A. File Upload via Multer Buffer
     if (req.file) {
       try {
-        // Keeps your assets segregated in a clean subfolder away from your DMG application inventory
         const avatarUrl = await uploadToCloudinary(req.file.buffer, "gbemileke_hospital/avatars");
         updateData.avatar = avatarUrl;
       } catch (uploadError) {
-        // ✅ FIX: Enhanced troubleshooting visibility for environment variable issues
         console.error("🚨 CLOUDINARY ENGINE CRASHED:", uploadError);
         return res.status(500).json({ 
           message: "Failed to upload avatar to cloud", 
           debugDetails: uploadError instanceof Error ? uploadError.message : uploadError 
         });
       }
+    } 
+    // 1B. Base64 Upload directly via JSON body payload
+    else if (avatar && avatar.startsWith("data:image")) {
+      try {
+        cloudinary.config({
+          cloud_name: process.env["CLOUDINARY_CLOUD_NAME"],
+          api_key: process.env["CLOUDINARY_API_KEY"],
+          api_secret: process.env["CLOUDINARY_API_SECRET"],
+        });
+
+        const uploadRes = await cloudinary.uploader.upload(avatar, {
+          folder: "gbemileke_hospital/avatars",
+        });
+        updateData.avatar = uploadRes.secure_url;
+      } catch (uploadError) {
+        console.error("🚨 BASE64 CLOUDINARY UPLOAD FAILED:", uploadError);
+        return res.status(500).json({ message: "Failed to upload avatar image" });
+      }
+    } else if (avatar) {
+      updateData.avatar = avatar;
     }
 
-    // 2. Safely parse and update address fields
+    // 2. Parse address payload (handles JSON string or nested Object)
     if (address) {
       try {
         const parsedAddress = typeof address === "string" ? JSON.parse(address) : address;
@@ -220,18 +248,13 @@ export async function updateUserProfile(req: Request, res: Response) {
 
     return res.status(200).json({
       message: "Profile updated successfully",
-      user: updatedUser,
+      user: sanitizeUser(updatedUser),
     });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error", error });
   }
 }
 
-/**
- * @desc    Update user role by ID
- * @route   PATCH /api/users/:id/role
- * @access  Private (Admin)
- */
 export async function updateUserRole(req: Request, res: Response) {
   try {
     const { id } = req.params as { id: string };
@@ -259,7 +282,7 @@ export async function updateUserRole(req: Request, res: Response) {
 
     return res.status(200).json({
       message: `User role updated to '${normalizedRole}' successfully.`,
-      user: updatedUser,
+      user: sanitizeUser(updatedUser),
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -269,7 +292,6 @@ export async function updateUserRole(req: Request, res: Response) {
   }
 }
 
-
 export async function deleteUserProfile(req: Request, res: Response) {
   try {
     const userId = req.user?._id;
@@ -277,21 +299,17 @@ export async function deleteUserProfile(req: Request, res: Response) {
       return res.status(401).json({ message: "Not authorized" });
     }
 
-    // 1. Fetch the user profile first so we can check for cloud assets before wiping the record
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User account not found" });
     }
 
-    // 2. If they have a custom avatar uploaded to Cloudinary, clean it up!
     if (user.avatar && user.avatar.includes("cloudinary.com")) {
       try {
-        // Extract the public ID from the URL (e.g., gbemileke_hospital/avatars/image_name)
         const urlParts = user.avatar.split("/");
-        const folderAndFileName = urlParts.slice(-2).join("/"); // gets "folder/filename"
-        const publicId = folderAndFileName.split(".")[0]; // removes the extension like .png
+        const folderAndFileName = urlParts.slice(-2).join("/");
+        const publicId = folderAndFileName.split(".")[0];
         
-        // Initialize config block dynamically to ensure env variable injection safety
         cloudinary.config({
           cloud_name: process.env["CLOUDINARY_CLOUD_NAME"],
           api_key: process.env["CLOUDINARY_API_KEY"],
@@ -300,15 +318,12 @@ export async function deleteUserProfile(req: Request, res: Response) {
 
         await cloudinary.uploader.destroy(publicId);
       } catch (cloudDeleteError) {
-        // Log the error but don't halt user deletion if cloud asset cleanup slips up
         console.error("⚠️ Failed to purge old avatar from cloud storage during deletion:", cloudDeleteError);
       }
     }
 
-    // 3. Complete the database removal execution
     await User.findByIdAndDelete(userId);
 
-    // 4. Send clear instructions back to the frontend to purge localStorage/Cookies tokens
     return res.status(200).json({
       message: "Your profile and associated storage assets have been successfully deleted.",
       actionRequired: "CLEAR_LOCAL_AUTH_TOKENS" 
@@ -320,12 +335,12 @@ export async function deleteUserProfile(req: Request, res: Response) {
 }
 
 export default {
-    registerUser,
-    loginUser,
-    logoutUser,
-    getUserProfile,
-    getUserProfiles,
-    updateUserProfile,
-    updateUserRole,
-    deleteUserProfile
-}
+  registerUser,
+  loginUser,
+  logoutUser,
+  getUserProfile,
+  getUserProfiles,
+  updateUserProfile,
+  updateUserRole,
+  deleteUserProfile
+};
