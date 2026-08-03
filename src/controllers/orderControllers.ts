@@ -65,6 +65,7 @@ function calculateDeliveryFee(state: string, itemsPrice: number): number {
     case "taraba":
     case "yobe":
     case "zamfara":
+    case "abuja":
       return 12000;
     default:
       // Default rate for other states across Nigeria
