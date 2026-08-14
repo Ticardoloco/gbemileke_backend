@@ -8,6 +8,7 @@ import {
   updateUserProfile,
   deleteUserProfile,
   updateUserRole,
+  changePassword,
 } from "../controllers/userControllers.js";
 import { authorize, protect } from "../middleware/authMiddleware.js";
 import { upload } from "../utils/cloudinary.js";
@@ -241,5 +242,35 @@ router.patch("/:id/role", protect, authorize("admin"), updateUserRole);
  *         description: Not authorized
  */
 router.get("/", protect, getUserProfiles);
+
+/**
+ * @openapi
+ * /api/user/change-password:
+ *   put:
+ *     summary: Change authenticated user password
+ *     tags: [Authentication & Users]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string, example: "OldPassword123" }
+ *               newPassword: { type: string, example: "NewSecurePassword456" }
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Missing required fields or incorrect current password
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         $ref: '#/components/schemas/ErrorResponse'
+ */
+router.put("/change-password", protect, changePassword);
 
 export default router;

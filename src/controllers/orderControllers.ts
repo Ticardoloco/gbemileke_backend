@@ -86,6 +86,7 @@ async function initializePaystackTransaction(
       {
         email,
         amount: Math.round(amountInKobo),
+        callback_url: `${process.env["FRONTEND_URL"]}/my-orders`,
       },
       {
         headers: {
@@ -179,6 +180,14 @@ export async function createOrder(req: Request, res: Response) {
       }
 
       const quantity = Number(item.quantity) || 1;
+
+      if (dbProduct.stock !== undefined && dbProduct.stock < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for product "${dbProduct.name}". Only ${dbProduct.stock} remaining.`,
+        });
+      }
+
       itemsPrice += dbProduct.price * quantity;
 
       // Ensure key is lowercase "product" and properly converted to ObjectId
@@ -509,24 +518,33 @@ export async function cancelOrder(req: Request, res: Response) {
       });
     }
 
-    // Handle Paystack Refund if the order was already paid
-    if (order.isPaid && order.paymentInfo?.reference) {
-      try {
-        await axios.post(
-          "https://api.paystack.co/refund",
-          {
-            transaction: order.paymentInfo.reference,
-            customer_note: cancellationReason || "Customer requested order cancellation.",
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-              "Content-Type": "application/json",
+    if (order.isPaid) {
+      // 1. Restore stock to database
+      for (const item of order.orderItems) {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: item.quantity },
+        });
+      }
+
+      // Handle Paystack Refund if the order was already paid
+      if (order.paymentInfo?.reference) {
+        try {
+          await axios.post(
+            "https://api.paystack.co/refund",
+            {
+              transaction: order.paymentInfo.reference,
+              customer_note: cancellationReason || "Customer requested order cancellation.",
             },
-          }
-        );
-      } catch (refundError: any) {
-        console.error("Paystack refund initiation failed:", refundError.response?.data || refundError.message);
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+        } catch (refundError: any) {
+          console.error("Paystack refund initiation failed:", refundError.response?.data || refundError.message);
+        }
       }
     }
 
@@ -593,6 +611,12 @@ export async function handlePaystackWebhook(req: Request, res: Response) {
 
       if (order && !order.isPaid) {
         await order.markAsPaid(reference, channel, gateway_response);
+
+        for (const item of order.orderItems) {
+      await Product.findByIdAndUpdate(item.product, {
+        $inc: { stock: -item.quantity }, 
+      });
+    }
       }
     }
 

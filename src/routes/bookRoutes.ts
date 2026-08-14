@@ -192,13 +192,17 @@ router
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [Pending, Approved, Completed, Cancelled]
- *                 example: Approved
+ *                 enum: [Pending, Approved, Completed, Rejected, Cancelled]
+ *                 example: Rejected
+ *               rejectionReason:
+ *                 type: string
+ *                 description: Required if status is set to 'Rejected'
+ *                 example: "Doctor unavailable on scheduled date"
  *     responses:
  *       200:
  *         description: Appointment status updated successfully
  *       400:
- *         description: Invalid ID format or invalid status value
+ *         description: Invalid ID format, invalid status value, or missing rejection reason
  *       404:
  *         description: Appointment not found
  *       500:

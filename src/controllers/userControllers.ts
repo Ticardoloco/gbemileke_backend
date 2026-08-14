@@ -334,6 +334,37 @@ export async function deleteUserProfile(req: Request, res: Response) {
   }
 }
 
+export async function changePassword(req: Request, res: Response) {
+  try{
+    const userId = req.user?._id;
+    if(!userId){
+      return res.status(401).json({ message: "Not authorized" });
+    }
+    const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
+
+    if(!currentPassword || !newPassword){
+      return res.status(400).json({ message: "Both current and new passwords are required" });
+    }
+
+    const user = await User.findById(userId);
+    if(!user){
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if(!isMatch){
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.status(200).json({ message: "Password changed successfully" });
+  }catch(error){
+    return res.status(500).json({ message: "Internal Server Error", error });
+  }
+}
+
 export default {
   registerUser,
   loginUser,
@@ -342,5 +373,6 @@ export default {
   getUserProfiles,
   updateUserProfile,
   updateUserRole,
-  deleteUserProfile
+  deleteUserProfile,
+  changePassword
 };

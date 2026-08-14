@@ -33,6 +33,7 @@ export async function initializeCardPayment(req: Request, res: Response) {
         .status(400)
         .json({ message: "Specialty is required to initialized a card" });
     }
+    
 
     // Check if user already has an active, paid card for THIS specific specialty
     const existingCard = await PatientCard.findOne({
@@ -101,7 +102,7 @@ export async function verifyCardPayment(req: Request, res: Response) {
     const {
       reference,
       specialty,
-      age,
+      dateOfBirth,
       maritalStatus,
       nextOfKinName,
       nextOfKinPhone,
@@ -109,7 +110,7 @@ export async function verifyCardPayment(req: Request, res: Response) {
     } = req.body as {
       reference: string;
       specialty: SpecialtySlug;
-      age: number;
+      dateOfBirth: string | Date;
       maritalStatus: MaritalTypes;
       nextOfKinName: string;
       nextOfKinPhone: string;
@@ -157,7 +158,7 @@ export async function verifyCardPayment(req: Request, res: Response) {
     if (card) {
       card.isPaid = true;
       card.paymentReference = reference;
-      if (age) card.age = age;
+      if (dateOfBirth) card.dateOfBirth = new Date(dateOfBirth);
       if (maritalStatus) card.maritalStatus = maritalStatus;
       if (nextOfKinName) card.nextOfKinName = nextOfKinName;
       if (nextOfKinPhone) card.nextOfKinPhone = nextOfKinPhone;
@@ -165,16 +166,16 @@ export async function verifyCardPayment(req: Request, res: Response) {
 
       await card.save();
     } else {
-      if (!age || !nextOfKinName || !nextOfKinPhone) {
+      if (!dateOfBirth || !nextOfKinName || !nextOfKinPhone) {
         return res.status(400).json({
           message:
-            "Age, next of kin name, and next of kin phone number are required for registration.",
+            "Date of birth, next of kin name, and next of kin phone number are required for registration.",
         });
       }
       card = await PatientCard.create({
         patient: userId,
         specialty,
-        age,
+        dateOfBirth: new Date(dateOfBirth),
         maritalStatus,
         nextOfKinName,
         nextOfKinPhone,
@@ -222,8 +223,10 @@ export async function getMyPatientCards(req: Request, res: Response) {
 
     const cards = await PatientCard.find(filter)
       .populate("patient", "fullName email phoneNumber")
-      .populate("history.author", "fullName role");
-
+      .populate("history.author", "fullName role")
+      .populate("billing.sessions.createdBy", "fullName role")
+      .populate("billing.paymentHistory.recordedBy", "fullName role");
+      
     return res.status(200).json({
       success: true,
       count: cards.length,
@@ -262,6 +265,8 @@ export async function getAllPatientCards(req: Request, res: Response) {
     const cards = await PatientCard.find(filter)
       .populate("patient", "fullName email phoneNumber gender avatar")
       .populate("history.author", "fullName role")
+      .populate("billing.sessions.createdBy", "fullName role")
+      .populate("billing.paymentHistory.recordedBy", "fullName role")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -278,22 +283,61 @@ export async function getAllPatientCards(req: Request, res: Response) {
 }
 
 /**
- * @desc    Add Medical History entry to Patient Card
- * @route   POST /api/patient-cards/:id/history
- * @access  Private (Doctor / Admin / Medical Staff)
+ * @desc    Get Single Patient Card by ID
+ * @route   GET /api/patient-cards/:id
+ * @access  Private
  */
+export async function getPatientCardById(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const userId = req.user?._id?.toString();
+    const userRole = req.user?.role;
 
+    const card = await PatientCard.findById(id)
+      .populate("patient", "fullName email phoneNumber gender avatar")
+      .populate("history.author", "fullName role")
+      .populate("billing.sessions.createdBy", "fullName role")
+      .populate("billing.paymentHistory.recordedBy", "fullName role");
+
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    // Access check: Only allow access if user is staff/admin OR if the card belongs to the requesting patient
+    const isOwner = card.patient?._id?.toString() === userId || card.patient?.toString() === userId;
+    const isStaff = userRole && ["admin", "practitioner"].includes(userRole.toLowerCase());
+
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({
+        message: "Forbidden: You do not have permission to view this card.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      card,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Error retrieving patient card.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Add Medical History entry
+ * @route   POST /api/patient-cards/:id/history
+ * @access  Private (Practic / Admin)
+ */
 export async function addMedicalHistory(req: Request, res: Response) {
   try {
-    const { id } = req.params as {
-      id: string;
-    };
-
+    const { id } = req.params as { id: string };
     const { note } = req.body as { note: string };
     const authorId = req.user?._id;
 
     if (!note) {
-      return res.status(400).json({ message: "Note field is required" });
+      return res.status(400).json({ message: "Note field is required." });
     }
 
     const card = await PatientCard.findById(id);
@@ -321,18 +365,18 @@ export async function addMedicalHistory(req: Request, res: Response) {
       message: "Medical history recorded.",
       history: card.history,
     });
-  } catch (error) {
+  } catch (error: any) {
     return res.status(500).json({
       message: "Failed to add history.",
-      error: (error as any).message,
+      error: error.message,
     });
   }
 }
 
 /**
- * @desc    Update an existing Medical History entry in a Patient Card
+ * @desc    Update Medical History entry
  * @route   PUT /api/patient-cards/:id/history/:historyId
- * @access  Private (Doctor / Admin / Medical Staff)
+ * @access  Private (Doctor / Admin)
  */
 export async function updateMedicalHistory(req: Request, res: Response) {
   try {
@@ -340,7 +384,9 @@ export async function updateMedicalHistory(req: Request, res: Response) {
     const { note } = req.body as { note?: string };
 
     if (!note) {
-      return res.status(400).json({ message: "Note field is required to update history." });
+      return res
+        .status(400)
+        .json({ message: "Note field is required to update history." });
     }
 
     const card = await PatientCard.findById(id);
@@ -366,6 +412,42 @@ export async function updateMedicalHistory(req: Request, res: Response) {
   } catch (error: any) {
     return res.status(500).json({
       message: "Failed to update history.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Delete Medical History entry
+ * @route   DELETE /api/patient-cards/:id/history/:historyId
+ * @access  Private (Doctor / Admin)
+ */
+export async function deleteMedicalHistory(req: Request, res: Response) {
+  try {
+    const { id, historyId } = req.params as { id: string; historyId: string };
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    
+    const historyEntry = (card.history as any).id(historyId);
+    if (!historyEntry) {
+      return res.status(404).json({ message: "Medical history entry not found." });
+    }
+
+    historyEntry.deleteOne();
+    await card.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Medical history entry removed successfully.",
+      history: card.history,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to delete history entry.",
       error: error.message,
     });
   }
@@ -469,13 +551,247 @@ export async function updatePrescription(req: Request, res: Response) {
   }
 }
 
+/**
+ * @desc    Delete Prescription entry
+ * @route   DELETE /api/patient-cards/:id/prescriptions/:prescriptionId
+ * @access  Private (Doctor / Admin)
+ */
+export async function deletePrescription(req: Request, res: Response) {
+  try {
+    const { id, prescriptionId } = req.params as {
+      id: string;
+      prescriptionId: string;
+    };
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    const prescriptionEntry = (card.prescriptions as any).id(prescriptionId);
+    if (!prescriptionEntry) {
+      return res.status(404).json({ message: "Prescription entry not found." });
+    }
+
+    prescriptionEntry.deleteOne();
+    await card.save();
+    return res.status(200).json({
+      success: true,
+      message: "Prescription entry removed successfully.",
+      prescriptions: card.prescriptions,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to delete prescription.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Add a new Treatment/Billing Session
+ * @route   POST /api/patient-cards/:id/billing/sessions
+ * @access  Private (Doctor / Practitioner / Admin)
+ */
+export async function addTreatmentSession(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const { title, cost, note } = req.body as {
+      title: string;
+      cost: number;
+      note?: string;
+    };
+    const createdBy = req.user?._id;
+
+    if (!title || cost === undefined || cost < 0) {
+      return res.status(400).json({
+        message: "Session title and a non-negative cost are required.",
+      });
+    }
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    card.billing.sessions.push({
+      title,
+      cost,
+      note,
+      date: new Date(),
+      isClosed: false,
+      createdBy,
+    });
+
+    await card.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "New treatment billing session added.",
+      billing: card.billing,
+      outstandingBalance: card.outstandingBalance,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to add treatment session.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Update cost or status of a specific Treatment Session
+ * @route   PUT /api/patient-cards/:id/billing/sessions/:sessionId
+ * @access  Private (Doctor / Admin)
+ */
+export async function updateTreatmentSession(req: Request, res: Response) {
+  try {
+    const { id, sessionId } = req.params as { id: string; sessionId: string };
+    const { title, cost, isClosed, note } = req.body as {
+      title?: string;
+      cost?: number;
+      isClosed?: boolean;
+      note?: string;
+    };
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    const session = (card.billing.sessions as any).id(sessionId);
+    if (!session) {
+      return res.status(404).json({ message: "Treatment session not found." });
+    }
+
+    if (title !== undefined) session.title = title;
+    if (cost !== undefined && cost >= 0) session.cost = cost;
+    if (isClosed !== undefined) session.isClosed = isClosed;
+    if (note !== undefined) session.note = note;
+
+    await card.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Treatment session updated.",
+      billing: card.billing,
+      outstandingBalance: card.outstandingBalance,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to update treatment session.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Close a specific Treatment Session
+ * @route   PATCH /api/patient-cards/:id/billing/sessions/:sessionId/close
+ * @access  Private (Doctor / Admin)
+ */
+export async function closeTreatmentSession(req: Request, res: Response) {
+  try {
+    const { id, sessionId } = req.params as { id: string; sessionId: string };
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    const session = (card.billing.sessions as any).id(sessionId);
+    if (!session) {
+      return res.status(404).json({ message: "Treatment session not found." });
+    }
+
+    if (session.isClosed) {
+      return res.status(400).json({ message: "Treatment session is already closed." });
+    }
+
+    session.isClosed = true;
+    await card.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Treatment session closed successfully.",
+      billing: card.billing,
+      outstandingBalance: card.outstandingBalance,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to close treatment session.",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * @desc    Record a Billing Payment (Cash, Card, Transfer)
+ * @route   POST /api/patient-cards/:id/billing/payments
+ * @access  Private (Accountant / Staff / Admin)
+ */
+export async function recordPayment(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const { amount, sessionId, reference, paymentMethod, note } = req.body as {
+      amount: number;
+      sessionId?: string;
+      reference?: string;
+      paymentMethod?: "cash" | "transfer" | "pos";
+      note?: string;
+    };
+    const recordedBy = req.user?._id;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        message: "Payment amount must be greater than zero.",
+      });
+    }
+
+    const card = await PatientCard.findById(id);
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    card.billing.paymentHistory.push({
+      amount,
+      sessionId: sessionId ? (sessionId as any) : undefined,
+      date: new Date(),
+      reference,
+      paymentMethod: paymentMethod || "cash",
+      recordedBy,
+      note,
+    });
+
+    await card.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment recorded successfully.",
+      billing: card.billing,
+      outstandingBalance: card.outstandingBalance,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to record payment.",
+      error: error.message,
+    });
+  }
+}
 export default {
   initializeCardPayment,
   verifyCardPayment,
   getMyPatientCards,
   getAllPatientCards,
+  getPatientCardById,
   addMedicalHistory,
   updateMedicalHistory,
+  deleteMedicalHistory,
   addPrescription,
-  updatePrescription
+  updatePrescription,
+  deletePrescription,
+  addTreatmentSession,
+  updateTreatmentSession,
+  closeTreatmentSession,
+  recordPayment,
 };

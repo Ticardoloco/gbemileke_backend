@@ -128,15 +128,16 @@ export async function updateStatus(req: Request, res: Response) {
       id: string;
     };
 
-    const { status } = req.body as {
-      status: "Pending" | "Approved" | "Completed" | "Cancelled";
+    const { status, rejectionReason } = req.body as {
+      status: "Pending" | "Approved" | "Completed" | "Rejected" | "Cancelled";
+      rejectionReason: "string";
     };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid appointment ID format" });
     }
 
-    const validStatuses = ["Pending", "Approved", "Completed", "Cancelled"];
+    const validStatuses = ["Pending", "Approved", "Completed", "Rejected", "Cancelled"];
 
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
@@ -144,11 +145,24 @@ export async function updateStatus(req: Request, res: Response) {
       });
     }
 
-    const appointment = await Book.findByIdAndUpdate(
-      id,
-      { status },
-      { returnDocument: "after", runValidators: true },
-    ).populate("patient", "fullName email phoneNumber gender");
+    if (status === "Rejected" && (!rejectionReason || !rejectionReason.trim())) {
+      return res.status(400).json({
+        message: "A rejection reason is required when rejecting an appointment",
+      });
+    }
+
+    const updatePayload: { status: string; rejectionReason?: string } = {
+      status,
+      rejectionReason: status === "Rejected" ? rejectionReason?.trim() : "",
+    };
+
+
+
+    const appointment = await Book.findByIdAndUpdate(id, updatePayload, {
+      returnDocument: "after",
+      runValidators: true,
+    }).populate("patient", "fullName email phoneNumber gender");
+    
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
