@@ -20,9 +20,16 @@ const app = express();
 // 1. Enable CORS for all routes and preflight requests upfront
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    // origin: ["http://localhost:3000", "http://127.0.0.1:3000", " https://manly-duchess-ovary.ngrok-free.dev"],
+    origin: [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:5002",
+      "http://127.0.0.1:5002",
+      "https://manly-duchess-ovary.ngrok-free.dev",
+    ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
     credentials: true,
   })
 );

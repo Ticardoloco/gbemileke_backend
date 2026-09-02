@@ -48,6 +48,13 @@ export async function protect(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ message: "Not authorized, user no longer exists" });
     }
 
+    if (user.isSuspended) {
+      return res.status(403).json({ 
+        message: "Your account has been suspended. Please contact support.",
+        reason: user.suspensionReason || undefined
+      });
+    }
+
     // Attach the complete Mongoose user document to the request object
     req.user = user;
 

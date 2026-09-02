@@ -7,6 +7,7 @@ import {
   updateDeliveryFee,
   updateOrderStatus,
   cancelOrder,
+  deleteOrder,
   handlePaystackWebhook,
 } from "../controllers/orderControllers.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
@@ -409,6 +410,43 @@ router.put(
   protect,
   authorize("admin", "practitioner"),
   updateOrderStatus
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}:
+ *   delete:
+ *     summary: Delete an order by ID (Admin / Staff)
+ *     tags: [Orders]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The MongoDB Order ID
+ *         example: "65a123456789abcdef123456"
+ *     responses:
+ *       200:
+ *         description: Order deleted successfully
+ *       400:
+ *         description: Invalid order ID
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Order not found
+ *       500:
+ *         description: Failed to delete order
+ */
+router.delete(
+  "/:id",
+  protect,
+  authorize("admin", "practitioner"),
+  deleteOrder
 );
 
 export default router;

@@ -19,8 +19,10 @@ export interface IUSER extends Document {
   gender?: UserGender;
   passwordHash: string;
   role: UserRole;
-  avatar?: string; // 2. Added avatar string (typically a URL to S3/Cloudinary)
-  address?: IAddress; // 3. Added nested address interface
+  isSuspended: boolean; 
+  suspensionReason?: string;
+  avatar?: string; 
+  address?: IAddress; 
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +63,17 @@ const UserSchema: Schema<IUSER> = new Schema<IUSER>(
       type: String,
       enum: ["patient", "practitioner", "admin"],
       default: "patient",
+    },
+
+    isSuspended: {
+      type: Boolean,
+      default: false,
+    },
+
+    suspensionReason: {
+      type: String,
+      trim: true,
+      default: "",
     },
 
     // 4. Added avatar field configuration

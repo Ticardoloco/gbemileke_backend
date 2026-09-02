@@ -21,6 +21,10 @@ const options: swaggerJSDoc.Options = {
         url: "http://localhost:5002",
         description: "Local Development Server",
       },
+      {
+        url: "https://manly-duchess-ovary.ngrok-free.dev",
+        description: "Ngrok Tunnel",
+      },
     ],
     components: {
       securitySchemes: {

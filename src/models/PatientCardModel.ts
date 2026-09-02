@@ -254,6 +254,7 @@ const PatientCardSchema: Schema<IPatientCard> = new Schema<IPatientCard>(
         "infertility",
         "infection-treatment",
         "male-fertility-care",
+        "general-tradomedical-care",
       ],
       default: "anti-natal",
     },

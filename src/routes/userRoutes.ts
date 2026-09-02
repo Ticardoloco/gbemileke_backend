@@ -8,6 +8,7 @@ import {
   updateUserProfile,
   deleteUserProfile,
   updateUserRole,
+  suspendUser,
   changePassword,
 } from "../controllers/userControllers.js";
 import { authorize, protect } from "../middleware/authMiddleware.js";
@@ -75,6 +76,8 @@ router.post("/register", registerUser);
  *         description: User logged in successfully
  *       400:
  *         description: Invalid credentials
+ *       403:
+ *         description: Account is suspended
  *       500:
  *         $ref: '#/components/schemas/ErrorResponse'
  */
@@ -104,7 +107,7 @@ router.post("/login", loginUser);
 router.post("/logout", logoutUser);
 
 // ==========================================
-// PROTECTED ROUTES (Requires valid Bearer Token)
+// PROTECTED USER ROUTES
 // ==========================================
 
 /**
@@ -120,6 +123,8 @@ router.post("/logout", logoutUser);
  *         description: Profile details retrieved
  *       401:
  *         description: Not authorized, missing or invalid token
+ *       403:
+ *         description: Account is suspended
  */
 router.get("/profile", protect, getUserProfile);
 
@@ -127,7 +132,7 @@ router.get("/profile", protect, getUserProfile);
  * @openapi
  * /api/user/profile:
  *   put:
- *     summary: Update profile fields and/or upload avatar image to Cloudinary
+ *     summary: Update profile fields and/or upload avatar image
  *     tags: [Authentication & Users]
  *     security:
  *       - BearerAuth: []
@@ -141,7 +146,7 @@ router.get("/profile", protect, getUserProfile);
  *               phoneNumber: { type: string, example: "+2348012345678" }
  *               gender: { type: string, enum: [male, female, other], example: "male" }
  *               avatar: { type: string, format: binary, description: "Upload raw image file" }
- *               address: { type: string, description: "Stringified JSON object. e.g. {\"city\":\"Lagos\",\"country\":\"Nigeria\"}" }
+ *               address: { type: string, description: "Stringified JSON object" }
  *     responses:
  *       200:
  *         description: Profile updated successfully
@@ -149,6 +154,8 @@ router.get("/profile", protect, getUserProfile);
  *         description: Invalid gender or address format payload
  *       401:
  *         description: Not authorized
+ *       403:
+ *         description: Account is suspended
  */
 router.put("/profile", protect, upload.single("avatar"), updateUserProfile);
 
@@ -163,85 +170,16 @@ router.put("/profile", protect, upload.single("avatar"), updateUserProfile);
  *     responses:
  *       200:
  *         description: Account removed successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "Your profile and associated storage assets have been successfully deleted."
- *                 actionRequired:
- *                   type: string
- *                   example: "CLEAR_LOCAL_AUTH_TOKENS"
  *       401:
  *         description: Not authorized
+ *       403:
+ *         description: Account is suspended
  *       404:
  *         description: User record not found
  *       500:
  *         description: Internal Server Error
  */
 router.delete("/profile", protect, deleteUserProfile);
-
-/**
- * @openapi
- * /api/user/{id}/role:
- *   patch:
- *     summary: Update user role by ID (Admin only)
- *     tags: [Authentication & Users]
- *     security:
- *       - BearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: User MongoDB ID
- *         example: "6a60e167d67256bf168fdec5"
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [role]
- *             properties:
- *               role:
- *                 type: string
- *                 enum: [patient, practitioner, admin]
- *                 example: "practitioner"
- *     responses:
- *       200:
- *         description: User role updated successfully
- *       400:
- *         description: Invalid role provided
- *       401:
- *         description: Not authorized
- *       403:
- *         description: Forbidden (Requires Admin role)
- *       404:
- *         description: User record not found
- *       500:
- *         description: Internal Server Error
- */
-router.patch("/:id/role", protect, authorize("admin"), updateUserRole);
-
-/**
- * @openapi
- * /api/user:
- *   get:
- *     summary: Retrieve list of all hospital users (Protected)
- *     tags: [Authentication & Users]
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Directory list retrieved successfully
- *       401:
- *         description: Not authorized
- */
-router.get("/", protect, getUserProfiles);
 
 /**
  * @openapi
@@ -268,9 +206,117 @@ router.get("/", protect, getUserProfiles);
  *         description: Missing required fields or incorrect current password
  *       401:
  *         description: Not authorized
+ *       403:
+ *         description: Account is suspended
  *       500:
  *         $ref: '#/components/schemas/ErrorResponse'
  */
 router.put("/change-password", protect, changePassword);
+
+// ==========================================
+// ADMIN-ONLY MANAGEMENT ROUTES
+// ==========================================
+
+/**
+ * @openapi
+ * /api/user:
+ *   get:
+ *     summary: Retrieve list of all hospital users (Admin Only)
+ *     tags: [Authentication & Users]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Directory list retrieved successfully
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Admin role)
+ */
+router.get("/", protect, authorize("admin", "practitioner"), getUserProfiles);
+
+/**
+ * @openapi
+ * /api/user/{id}/role:
+ *   patch:
+ *     summary: Update user role by ID (Admin only)
+ *     tags: [Authentication & Users]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User MongoDB ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role]
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [patient, practitioner, admin]
+ *                 example: "practitioner"
+ *     responses:
+ *       200:
+ *         description: User role updated successfully
+ *       400:
+ *         description: Invalid role provided
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Admin role)
+ *       404:
+ *         description: User record not found
+ */
+router.patch("/:id/role", protect, authorize("admin"), updateUserRole);
+
+/**
+ * @openapi
+ * /api/user/{id}/suspend:
+ *   patch:
+ *     summary: Suspend or unsuspend user account (Admin only)
+ *     tags: [Authentication & Users]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User MongoDB ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [isSuspended]
+ *             properties:
+ *               isSuspended:
+ *                 type: boolean
+ *                 example: true
+ *               reason:
+ *                 type: string
+ *                 example: "Violation of terms of service"
+ *     responses:
+ *       200:
+ *         description: User suspension status updated successfully
+ *       400:
+ *         description: Invalid payload format
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Admin role)
+ *       404:
+ *         description: User record not found
+ */
+router.patch("/:id/suspend", protect, authorize("admin"), suspendUser);
 
 export default router;

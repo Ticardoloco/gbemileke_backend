@@ -326,6 +326,34 @@ export async function getPatientCardById(req: Request, res: Response) {
 }
 
 /**
+ * @desc    Delete Patient Card by ID
+ * @route   DELETE /api/patient-cards/:id
+ * @access  Private (Admin)
+ */
+export async function deletePatientCard(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+
+    const card = await PatientCard.findByIdAndDelete(id);
+
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Patient card deleted successfully.",
+      deletedCardId: id,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to delete patient card.",
+      error: error.message,
+    });
+  }
+}
+
+/**
  * @desc    Add Medical History entry
  * @route   POST /api/patient-cards/:id/history
  * @access  Private (Practic / Admin)
@@ -725,6 +753,7 @@ export async function closeTreatmentSession(req: Request, res: Response) {
   }
 }
 
+
 /**
  * @desc    Record a Billing Payment (Cash, Card, Transfer)
  * @route   POST /api/patient-cards/:id/billing/payments
@@ -753,6 +782,29 @@ export async function recordPayment(req: Request, res: Response) {
       return res.status(404).json({ message: "Patient card not found." });
     }
 
+    // 1. Calculate total cost of all treatment sessions
+    const totalCost = card.billing.sessions.reduce(
+      (sum, session) => sum + (session.cost || 0),
+      0
+    );
+
+    // 2. Calculate total payments made so far
+    const totalPaidSoFar = card.billing.paymentHistory.reduce(
+      (sum, payment) => sum + (payment.amount || 0),
+      0
+    );
+
+    // 3. Calculate remaining balance
+    const remainingBalance = totalCost - totalPaidSoFar;
+
+    // 4. Check if the incoming payment exceeds the remaining balance
+    if (amount > remainingBalance) {
+      return res.status(400).json({
+        message: `Payment amount (${amount}) exceeds the remaining balance (${remainingBalance > 0 ? remainingBalance : 0}).`,
+      });
+    }
+
+    // Record the payment
     card.billing.paymentHistory.push({
       amount,
       sessionId: sessionId ? (sessionId as any) : undefined,
@@ -784,6 +836,7 @@ export default {
   getMyPatientCards,
   getAllPatientCards,
   getPatientCardById,
+  deletePatientCard,
   addMedicalHistory,
   updateMedicalHistory,
   deleteMedicalHistory,

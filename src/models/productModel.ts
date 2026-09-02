@@ -24,7 +24,7 @@ const ProductSchema: Schema<IProduct> = new Schema<IProduct> (
         category: {
             type: String,
             required: [true, "Category is required"],
-            enum: ["anti-natal", "post-natal", "labor-and-delivery", "stroke-recovery", "bone-setting", "infertility", "infection-treatment", "low-sperm-count"],
+            enum: ["anti-natal", "post-natal", "labor-and-delivery", "stroke-recovery", "bone-setting", "infertility", "infection-treatment", "low-sperm-count", "general-tradomedical-care"],
         },
 
         image: {

@@ -21,6 +21,8 @@ const sanitizeUser = (user: any) => ({
   phoneNumber: user.phoneNumber || "",
   gender: user.gender || null,
   role: user.role,
+  isSuspended: Boolean(user.isSuspended),
+  suspensionReason: user.suspensionReason || "",
   avatar: user.avatar || "",
   address: user.address || {
     street: "",
@@ -96,6 +98,13 @@ export async function loginUser(req: Request, res: Response) {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    if (user.isSuspended) {
+      return res.status(403).json({
+        message: "Your account has been suspended. Please contact support.",
+        reason: user.suspensionReason || undefined,
+      });
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -292,6 +301,49 @@ export async function updateUserRole(req: Request, res: Response) {
   }
 }
 
+export async function suspendUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const { isSuspended, reason } = req.body as {
+      isSuspended?: boolean;
+      reason?: string;
+    };
+
+    if (typeof isSuspended !== "boolean") {
+      return res.status(400).json({
+        message: "The 'isSuspended' boolean field is required.",
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isSuspended,
+          suspensionReason: isSuspended ? (reason || "") : "",
+        },
+      },
+      { returnDocument: "after", runValidators: true }
+    ).select("-passwordHash");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const actionText = isSuspended ? "suspended" : "unsuspended";
+
+    return res.status(200).json({
+      message: `User has been successfully ${actionText}.`,
+      user: sanitizeUser(updatedUser),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to update user suspension status.",
+      error: error.message || error,
+    });
+  }
+}
+
 export async function deleteUserProfile(req: Request, res: Response) {
   try {
     const userId = req.user?._id;
@@ -373,6 +425,7 @@ export default {
   getUserProfiles,
   updateUserProfile,
   updateUserRole,
+  suspendUser,
   deleteUserProfile,
   changePassword
 };

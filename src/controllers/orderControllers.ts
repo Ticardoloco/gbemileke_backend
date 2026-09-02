@@ -571,6 +571,56 @@ export async function cancelOrder(req: Request, res: Response) {
 }
 
 /**
+ * @desc    Delete order by ID (Admin/Staff action, restores stock if order wasn't cancelled yet)
+ * @route   DELETE /api/orders/:id
+ * @access  Private (Admin / Staff)
+ */
+export async function deleteOrder(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID.",
+      });
+    }
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    // Restore stock if the order was paid/active and not already cancelled
+    if (order.isPaid && order.orderStatus !== "cancelled") {
+      for (const item of order.orderItems) {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: item.quantity },
+        });
+      }
+    }
+
+    await Order.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Order deleted successfully.",
+      data: { id },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete order.",
+      error: error.message,
+    });
+  }
+}
+
+/**
  * @desc    Paystack Webhook Handler (Auto-confirms payment on charge.success)
  * @route   POST /api/orders/webhook/paystack
  * @access  Public (Validated via Paystack Signature)
@@ -637,5 +687,6 @@ export default {
   updateDeliveryFee,
   updateOrderStatus,
   cancelOrder,
+  deleteOrder,
   handlePaystackWebhook,
 };

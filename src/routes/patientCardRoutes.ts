@@ -13,6 +13,7 @@
 //   deletePrescription,
 //   addTreatmentSession,
 //   updateTreatmentSession,
+//   closeTreatmentSession,
 //   recordPayment,
 // } from "../controllers/patientCardControllers.js";
 // import { protect, authorize } from "../middleware/authMiddleware.js";
@@ -660,6 +661,50 @@
 
 // /**
 //  * @openapi
+//  * /api/patient-cards/{id}/billing/sessions/{sessionId}/close:
+//  *   patch:
+//  *     summary: Close an active treatment session
+//  *     tags: [Patient Cards]
+//  *     security:
+//  *       - BearerAuth: []
+//  *     parameters:
+//  *       - in: path
+//  *         name: id
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *         description: The Patient Card MongoDB ID
+//  *         example: "65a123456789abcdef123456"
+//  *       - in: path
+//  *         name: sessionId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *         description: The Treatment Session subdocument ID
+//  *         example: "65a987654321fedcba654321"
+//  *     responses:
+//  *       200:
+//  *         description: Treatment session closed successfully
+//  *       400:
+//  *         description: Session is already closed
+//  *       401:
+//  *         description: Not authorized
+//  *       403:
+//  *         description: Forbidden (Requires Medical Staff or Admin role)
+//  *       404:
+//  *         description: Patient card or session not found
+//  *       500:
+//  *         description: Failed to close treatment session
+//  */
+// router.patch(
+//   "/:id/billing/sessions/:sessionId/close",
+//   protect,
+//   authorize("practitioner", "admin"),
+//   closeTreatmentSession
+// );
+
+// /**
+//  * @openapi
 //  * /api/patient-cards/{id}/billing/payments:
 //  *   post:
 //  *     summary: Record an offline or manual bill payment against a patient card balance
@@ -719,6 +764,7 @@
 
 // export default router;
 
+
 import { Router } from "express";
 import {
   initializeCardPayment,
@@ -736,6 +782,7 @@ import {
   updateTreatmentSession,
   closeTreatmentSession,
   recordPayment,
+  deletePatientCard, // <-- Added controller import
 } from "../controllers/patientCardControllers.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 
@@ -947,6 +994,41 @@ router.get(
  *         description: Error retrieving patient card
  */
 router.get("/:id", protect, getPatientCardById);
+
+/**
+ * @openapi
+ * /api/patient-cards/{id}:
+ *   delete:
+ *     summary: Delete a patient card by ID (Admin only)
+ *     tags: [Patient Cards]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Patient Card MongoDB ID
+ *         example: "65a123456789abcdef123456"
+ *     responses:
+ *       200:
+ *         description: Patient card deleted successfully
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Admin role)
+ *       404:
+ *         description: Patient card not found
+ *       500:
+ *         description: Error deleting patient card
+ */
+router.delete(
+  "/:id",
+  protect,
+  authorize("admin"), // Restricted to admin role for medical record deletion safety
+  deletePatientCard
+);
 
 // ==========================================
 // MEDICAL HISTORY ROUTES
