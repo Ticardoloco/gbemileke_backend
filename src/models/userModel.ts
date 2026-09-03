@@ -22,7 +22,9 @@ export interface IUSER extends Document {
   isSuspended: boolean; 
   suspensionReason?: string;
   avatar?: string; 
-  address?: IAddress; 
+  address?: IAddress;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,6 +91,16 @@ const UserSchema: Schema<IUSER> = new Schema<IUSER>(
       state: { type: String, trim: true },
       zipCode: { type: String, trim: true },
       country: { type: String, trim: true },
+    },
+
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
     },
   },
   {

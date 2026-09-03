@@ -3,6 +3,8 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary"; 
 import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { sendEmail } from "../utils/sendEmail.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 const getJwtSecret = (): string => {
@@ -417,6 +419,124 @@ export async function changePassword(req: Request, res: Response) {
   }
 }
 
+/**
+ * @desc    Generate password reset token and send email link
+ * @route   POST /api/users/forgot-password
+ * @access  Public
+ */
+
+export async function forgotPassword(req: Request, res: Response) {
+  try {
+    const { email } = req.body as { email: string };
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+
+    // Protect against account enumeration attacks
+    if (!user) {
+      return res.status(200).json({
+        message: "If an account with that email exists, a password reset link has been sent.",
+      });
+    }
+
+    // Generate plain and hashed tokens
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await user.save();
+
+    const frontendUrl = process.env["FRONTEND_URL"] || "http://localhost:3000";
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+
+    const message = `
+      <h2>Password Reset Request</h2>
+      <p>Hello ${user.fullName},</p>
+      <p>You requested a password reset. Click the link below to set a new password:</p>
+      <a href="${resetUrl}" target="_blank" style="display:inline-block;padding:10px 20px;background-color:#0284c7;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
+      <p>This link will expire in 1 hour.</p>
+      <p>If you did not request this, please ignore this email.</p>
+    `;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: "Password Reset Request - Gbemileke Hospital",
+        message,
+      });
+
+      return res.status(200).json({
+        message: "Password reset link sent to your email address.",
+      });
+    } catch (emailError: any) {
+      // Revert token state on database
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();  
+
+      console.error("🚨 RESET EMAIL DELIVERY FAILED:", emailError);
+
+      // Expose error details in dev mode to identify SMTP failure immediately
+      const detail = emailError?.message || emailError;
+      return res.status(500).json({ 
+        message: process.env.NODE_ENV === "development" 
+          ? `Email delivery failed: ${detail}`
+          : "Email could not be sent. Please try again later." 
+      });
+    }
+  } catch (error: any) {
+    console.error("🚨 FORGOT PASSWORD CONTROLLER CRASH:", error);
+    return res.status(500).json({ 
+      message: "Internal Server Error", 
+      error: error?.message || error 
+    });
+  }
+}
+
+/**
+ * @desc    Reset password using provided token
+ * @route   POST /api/users/reset-password/:token
+ * @access  Public
+ */
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const { token } = req.params as { token: string };
+    const { password } = req.body as { password: string };
+
+    if (!password) {
+      return res.status(400).json({ message: "New password is required" });
+    }
+
+    // Hash param token to match DB entry
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired password reset token" });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Password reset successful. You can now log in with your new password.",
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error", error });
+  }
+}
+
 export default {
   registerUser,
   loginUser,
@@ -427,5 +547,7 @@ export default {
   updateUserRole,
   suspendUser,
   deleteUserProfile,
-  changePassword
+  changePassword,
+  forgotPassword,
+  resetPassword,
 };
