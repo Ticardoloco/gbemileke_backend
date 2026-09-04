@@ -143,8 +143,14 @@
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import type { Express, Request, Response } from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// CDN static assets prevent blank screen rendering failures in Vercel serverless environments
+// Recreate __dirname since your project uses ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// CDN assets prevent blank UI screens on Vercel's serverless environment
 const SWAGGER_CDN_CSS =
   "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css";
 const SWAGGER_CDN_JS = [
@@ -202,18 +208,18 @@ const options: swaggerJSDoc.Options = {
       },
     },
   },
-  // Safely scan relative globs without throwing path errors on Vercel
-  apis: ["./src/routes/*.ts", "./routes/*.js", "./routes/*.ts", "./dist/routes/*.js"],
+  // Absolute paths matching both TS (dev) and compiled JS (Vercel deployment)
+  apis: [
+    path.resolve(__dirname, "../routes/*.ts"),
+    path.resolve(__dirname, "../routes/*.js"),
+    path.resolve(__dirname, "./routes/*.ts"),
+    path.resolve(__dirname, "./routes/*.js"),
+    "./src/routes/*.ts",
+    "./routes/*.js",
+  ],
 };
 
-// Wrap in try-catch so swagger failures NEVER crash the backend server
-let swaggerSpec: any;
-try {
-  swaggerSpec = swaggerJSDoc(options);
-} catch (error) {
-  console.error("Swagger generation failed safely:", error);
-  swaggerSpec = options.definition;
-}
+const swaggerSpec = swaggerJSDoc(options);
 
 export function setupSwagger(app: Express): void {
   // Serve raw JSON spec endpoint
@@ -222,18 +228,15 @@ export function setupSwagger(app: Express): void {
     res.json(swaggerSpec);
   });
 
-  // Mount the UI interface safely
+  // Mount the UI interface with CDN asset overrides
   app.use(
     "/docs",
     swaggerUi.serve,
     swaggerUi.setup(swaggerSpec, {
       customCssUrl: SWAGGER_CDN_CSS,
       customJs: SWAGGER_CDN_JS,
-      swaggerOptions: {
-        url: "/docs.json",
-      },
     })
   );
 
-  console.log("🏥 Gbemileke Hospital Docs setup complete.");
+  console.log("🏥 Gbemileke Hospital Docs active at /docs");
 }
