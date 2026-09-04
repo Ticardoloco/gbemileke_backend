@@ -151,6 +151,88 @@
 
 // startServer();
 
+// import express from "express";
+// import dotenv from "dotenv";
+// import cors from "cors";
+// import { setupSwagger } from "./config/swagger.js";
+// import userRouter from "./routes/userRoutes.js";
+// import bookRouter from "./routes/bookRoutes.js";
+// import specialitiesRouter from "./routes/specialitiesRoutes.js";
+// import patientCardRouter from "./routes/patientCardRoutes.js";
+// import productRouter from "./routes/productRoute.js";
+// import orderRouter from "./routes/orderRoutes.js";
+// import { connectDB } from "./config/database.js";
+
+// dotenv.config();
+
+// const app = express();
+
+// // Connect to Database for serverless environments
+// connectDB().catch((err) => {
+//   console.error("Database connection error:", err);
+// });
+
+// // Set allowed origins dynamically via ENV, falling back to local/prod defaults
+// const allowedOrigins = process.env.ALLOWED_ORIGINS
+//   ? process.env.ALLOWED_ORIGINS.split(",")
+//   : [
+//       "http://localhost:3000",
+//       "http://127.0.0.1:3000",
+//       "https://gbemileke-backend.vercel.app",
+//     ];
+
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       if (!origin || allowedOrigins.includes(origin)) {
+//         callback(null, true);
+//       } else {
+//         callback(new Error(`CORS Policy: Origin ${origin} not allowed`));
+//       }
+//     },
+//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//     credentials: true,
+//   })
+// );
+
+// app.use(
+//   express.json({
+//     verify: (req: any, _res, buf) => {
+//       req.rawBody = buf;
+//     },
+//   })
+// );
+// app.use(express.urlencoded({ extended: true }));
+
+// // Initialize Swagger docs (ENABLED FOR ALL ENVIRONMENTS)
+// setupSwagger(app);
+
+// // Routes
+// app.use("/api/user", userRouter);
+// app.use("/api/specialities", specialitiesRouter);
+// app.use("/api/bookings", bookRouter);
+// app.use("/api/patient-cards", patientCardRouter);
+// app.use("/api/products", productRouter);
+// app.use("/api/orders", orderRouter);
+
+// // Root route check
+// app.get("/", (_req, res) => {
+//   res.send("Gbemileke Hospital API is running...");
+// });
+
+// // Run app.listen ONLY for local development
+// if (process.env.NODE_ENV !== "production") {
+//   const port = process.env.PORT || 4005;
+//   app.listen(port, () => {
+//     console.log(`Gbemileke Hospital Server running on port ${port}`);
+//   });
+// }
+
+// // CRITICAL FOR VERCEL SERVERLESS DEPLOYMENT
+// export default app;
+
+
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -167,35 +249,35 @@ dotenv.config();
 
 const app = express();
 
-// Connect to Database for serverless environments
-connectDB().catch((err) => {
-  console.error("Database connection error:", err);
-});
-
-// Set allowed origins dynamically via ENV, falling back to local/prod defaults
+// 1. CORS Configuration - FIXED: Safely reject origins without throwing a 500 Express error
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      "http://localhost:5002",
+      "http://127.0.0.1:5002",
       "https://gbemileke-backend.vercel.app",
     ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (like Postman, Swagger UI, or server-to-server)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS Policy: Origin ${origin} not allowed`));
+        // Pass false instead of an Error object so CORS simply blocks it without throwing a 500 crash
+        callback(null, false);
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
     credentials: true,
   })
 );
 
+// 2. Body Parsing Middleware
 app.use(
   express.json({
     verify: (req: any, _res, buf) => {
@@ -205,10 +287,21 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize Swagger docs (ENABLED FOR ALL ENVIRONMENTS)
+// 3. Database Connection Middleware (Guarantees DB readiness per serverless request)
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("Database connection middleware failure:", err);
+    next(err);
+  }
+});
+
+// 4. Initialize Swagger
 setupSwagger(app);
 
-// Routes
+// 5. Routes
 app.use("/api/user", userRouter);
 app.use("/api/specialities", specialitiesRouter);
 app.use("/api/bookings", bookRouter);
@@ -216,12 +309,12 @@ app.use("/api/patient-cards", patientCardRouter);
 app.use("/api/products", productRouter);
 app.use("/api/orders", orderRouter);
 
-// Root route check
+// Root route
 app.get("/", (_req, res) => {
   res.send("Gbemileke Hospital API is running...");
 });
 
-// Run app.listen ONLY for local development
+// Local Development Server Listener
 if (process.env.NODE_ENV !== "production") {
   const port = process.env.PORT || 4005;
   app.listen(port, () => {
@@ -229,5 +322,5 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
-// CRITICAL FOR VERCEL SERVERLESS DEPLOYMENT
+// CRITICAL FOR VERCEL
 export default app;
