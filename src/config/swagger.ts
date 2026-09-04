@@ -8,6 +8,14 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// CDN assets prevent blank UI screens on Vercel's serverless environment
+const SWAGGER_CDN_CSS =
+  "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css";
+const SWAGGER_CDN_JS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js",
+];
+
 const options: swaggerJSDoc.Options = {
   definition: {
     openapi: "3.0.0",
@@ -16,14 +24,14 @@ const options: swaggerJSDoc.Options = {
       version: "1.0.0",
       description: "Centralized backend API documentation for managing Gbemileke Tradomedical Hospital systems, including authentications, patients, practitioners, and clinical operations.",
     },
-    servers: [
-      {
-        url: "http://localhost:5002",
-        description: "Local Development Server",
-      },
+    servers: [ 
       {
         url: "https://gbemileke-backend.vercel.app",
         description: "Vercel Deployment",
+      },
+       {
+        url: "http://localhost:5002",
+        description: "Local Development Server",
       },
     ],
     components: {
@@ -70,6 +78,15 @@ export function setupSwagger(app: Express): void {
   app.get("/docs.json", (req, res) => {
     res.json(swaggerSpec);
   });
+
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      customCssUrl: SWAGGER_CDN_CSS,
+      customJs: SWAGGER_CDN_JS,
+    })
+  );
 
   console.log("🏥 Gbemileke Hospital Docs active at: http://localhost:5002/docs");
 }
