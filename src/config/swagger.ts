@@ -76,6 +76,7 @@ export function setupSwagger(app: Express): void {
 
   // FIX: Changed from res.send to res.json for structural stability
   app.get("/docs.json", (req, res) => {
+    res.setHeader("Content-Type", "application/json");
     res.json(swaggerSpec);
   });
 
