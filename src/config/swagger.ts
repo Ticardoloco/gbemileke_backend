@@ -22,8 +22,8 @@ const options: swaggerJSDoc.Options = {
         description: "Local Development Server",
       },
       {
-        url: "https://manly-duchess-ovary.ngrok-free.dev",
-        description: "Ngrok Tunnel",
+        url: "https://gbemileke-backend.vercel.app",
+        description: "Vercel Deployment",
       },
     ],
     components: {
