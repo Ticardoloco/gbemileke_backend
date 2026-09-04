@@ -1,5 +1,5 @@
-import User, { UserGender, UserRole } from "../models/userModel.js";
-import { Request, Response } from "express";
+import User, { type UserGender, type UserRole } from "../models/userModel.js";
+import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary"; 
 import bcrypt from "bcrypt";
@@ -215,9 +215,9 @@ export async function updateUserProfile(req: Request, res: Response) {
     else if (avatar && avatar.startsWith("data:image")) {
       try {
         cloudinary.config({
-          cloud_name: process.env["CLOUDINARY_CLOUD_NAME"],
-          api_key: process.env["CLOUDINARY_API_KEY"],
-          api_secret: process.env["CLOUDINARY_API_SECRET"],
+          cloud_name: process.env["CLOUDINARY_CLOUD_NAME"]!,
+          api_key: process.env["CLOUDINARY_API_KEY"]!,
+          api_secret: process.env["CLOUDINARY_API_SECRET"]!,
         });
 
         const uploadRes = await cloudinary.uploader.upload(avatar, {
@@ -362,15 +362,15 @@ export async function deleteUserProfile(req: Request, res: Response) {
       try {
         const urlParts = user.avatar.split("/");
         const folderAndFileName = urlParts.slice(-2).join("/");
-        const publicId = folderAndFileName.split(".")[0];
+        const publicId: string | undefined = folderAndFileName.split(".")[0];
         
         cloudinary.config({
-          cloud_name: process.env["CLOUDINARY_CLOUD_NAME"],
-          api_key: process.env["CLOUDINARY_API_KEY"],
-          api_secret: process.env["CLOUDINARY_API_SECRET"],
+          cloud_name: process.env["CLOUDINARY_CLOUD_NAME"]!,
+          api_key: process.env["CLOUDINARY_API_KEY"]!,
+          api_secret: process.env["CLOUDINARY_API_SECRET"]!,
         });
 
-        await cloudinary.uploader.destroy(publicId);
+        await cloudinary.uploader.destroy(publicId as string, { resource_type: "image" });
       } catch (cloudDeleteError) {
         console.error("⚠️ Failed to purge old avatar from cloud storage during deletion:", cloudDeleteError);
       }

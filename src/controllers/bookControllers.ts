@@ -1,9 +1,9 @@
-import Book from "../models/bookModel";
-import { Request, Response } from "express";
-import { SpecialtySlug } from "../models/specialitiesModel";
+import Book from "../models/bookModel.js";
+import type { Request, Response } from "express";
+import type { SpecialtySlug } from "../models/specialitiesModel.js";
 import { count } from "node:console";
 import mongoose from "mongoose";
-import PatientCard from "../models/PatientCardModel";
+import PatientCard from "../models/PatientCardModel.js";
 
 export async function bookAppointment(req: Request, res: Response) {
   try {

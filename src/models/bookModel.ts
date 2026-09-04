@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model, Document, Types } from "mongoose";
-import { SpecialtySlug } from "./specialitiesModel";
+import type { SpecialtySlug } from "./specialitiesModel.js";
 
 export interface IBook extends Document {
   patient: Types.ObjectId;
@@ -33,6 +33,7 @@ const BookSchema: Schema<IBook> = new Schema<IBook>(
         "bone-setting",
         "infertility",
         "infection-treatment",
+        "general-tradomedical-care"
       ],
     },
 

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model, Types } from "mongoose";
-import { SpecialtySlug } from "./specialitiesModel.js";
+import type { SpecialtySlug } from "./specialitiesModel.js";
 
 export type MaritalTypes = "single" | "married" | "divorced" | "widowed";
 export type PaymentStatus = "unpaid" | "partial" | "paid";

@@ -1,6 +1,6 @@
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
 import Product from "../models/productModel.js";
-import { SpecialtySlug } from "../models/specialitiesModel.js";
+import type { SpecialtySlug } from "../models/specialitiesModel.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import Specialities, { SpecialtySlug } from "../models/specialitiesModel";
-import { Request, Response } from "express";
+import Specialities, { type SpecialtySlug } from "../models/specialitiesModel.js";
+import type { Request, Response } from "express";
 
 export interface IQuery {
   _id?: string;

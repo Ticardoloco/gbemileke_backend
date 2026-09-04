@@ -1,15 +1,15 @@
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Order, {
-  IOrder,
-  IOrderItem,
-  IPaymentDetails,
-  IShippingAddress,
-} from "../models/orderModel";
-import Product from "../models/productModel";
+  type IOrder,
+  type IOrderItem,
+  type IPaymentDetails,
+  type IShippingAddress,
+} from "../models/orderModel.js";
+import Product from "../models/productModel.js";
 import axios from "axios";
-import { authorize } from "../middleware/authMiddleware";
+import { authorize } from "../middleware/authMiddleware.js";
 
 // Type definition for Paystack's external API response
 interface PaystackInitResponse {
@@ -57,7 +57,7 @@ function calculateDeliveryFee(state: string, itemsPrice: number): number {
     case "ebonyi":
     case "anambra":
     case "enugu":
-    case "Gombe":
+    case "gombe":
     case "imo":
     case "katsina":
     case "kogi":
@@ -65,7 +65,13 @@ function calculateDeliveryFee(state: string, itemsPrice: number): number {
     case "taraba":
     case "yobe":
     case "zamfara":
-    case "abuja":
+    case "bauchi":
+    case "bayelsa":
+    case "benue":
+    case "borno":
+    case "jigawa":
+    case "ebonyi":
+    case "fct - abuja":
       return 12000;
     default:
       // Default rate for other states across Nigeria

@@ -1,5 +1,5 @@
 import mongoose, {Schema, Model, Document} from "mongoose";
-import { SpecialtySlug } from "./specialitiesModel.js";
+import type { SpecialtySlug } from "./specialitiesModel.js";
 
 export interface IProduct extends Document {
     name: string;

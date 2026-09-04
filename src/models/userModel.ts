@@ -15,16 +15,16 @@ export interface IAddress {
 export interface IUSER extends Document {
   fullName: string;
   email: string;
-  phoneNumber?: string;
-  gender?: UserGender;
+  phoneNumber?: string | undefined;
+  gender?: UserGender | undefined;
   passwordHash: string;
   role: UserRole;
   isSuspended: boolean; 
-  suspensionReason?: string;
-  avatar?: string; 
-  address?: IAddress;
-  resetPasswordToken?: string;
-  resetPasswordExpires?: Date;
+  suspensionReason?: string | undefined;
+  avatar?: string | undefined; 
+  address?: IAddress | undefined;
+  resetPasswordToken?: string | undefined;
+  resetPasswordExpires?: Date | undefined;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,7 +1,7 @@
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
 import axios from "axios";
-import PatientCard, { MaritalTypes } from "../models/PatientCardModel.js";
-import { SpecialtySlug } from "../models/specialitiesModel";
+import PatientCard, { type MaritalTypes } from "../models/PatientCardModel.js";
+import type { SpecialtySlug } from "../models/specialitiesModel.js";
 
 
 const DEFAULT_CARD_FEE = 10000;
@@ -32,6 +32,10 @@ export async function initializeCardPayment(req: Request, res: Response) {
       return res
         .status(400)
         .json({ message: "Specialty is required to initialized a card" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ message: "Authentication required" });
     }
     
 
@@ -118,6 +122,12 @@ export async function verifyCardPayment(req: Request, res: Response) {
     };
 
     const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Authentication required.",
+      });
+    }
 
     if (!reference || !specialty) {
       return res.status(400).json({
@@ -645,10 +655,10 @@ export async function addTreatmentSession(req: Request, res: Response) {
     card.billing.sessions.push({
       title,
       cost,
-      note,
       date: new Date(),
       isClosed: false,
-      createdBy,
+      ...(note !== undefined ? { note } : {}),
+      ...(createdBy !== undefined ? { createdBy } : {}),
     });
 
     await card.save();
@@ -807,12 +817,12 @@ export async function recordPayment(req: Request, res: Response) {
     // Record the payment
     card.billing.paymentHistory.push({
       amount,
-      sessionId: sessionId ? (sessionId as any) : undefined,
       date: new Date(),
-      reference,
       paymentMethod: paymentMethod || "cash",
-      recordedBy,
-      note,
+      ...(sessionId ? { sessionId: sessionId as any } : {}),
+      ...(reference !== undefined ? { reference } : {}),
+      ...(recordedBy !== undefined ? { recordedBy } : {}),
+      ...(note !== undefined ? { note } : {}),
     });
 
     await card.save();

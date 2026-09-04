@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import User, { IUSER } from "../models/userModel.js";
+import User, { type IUSER } from "../models/userModel.js";
 
 // 1. Extend the Express Request type globally so TS knows req.user is valid everywhere
 declare global {
