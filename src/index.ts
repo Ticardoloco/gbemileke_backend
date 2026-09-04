@@ -46,12 +46,13 @@ app.use(
 // 2. Body Parsing Middleware
 app.use(
   express.json({
+    limit: "50mb",
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
   })
 );
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // 3. Database Connection Middleware (Guarantees DB readiness per serverless request)
 app.use(async (_req, _res, next) => {
