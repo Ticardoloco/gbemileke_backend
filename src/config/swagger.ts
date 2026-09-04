@@ -143,12 +143,6 @@
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import type { Express, Request, Response } from "express";
-import path from "path";
-import { fileURLToPath } from "url";
-
-// Recreate __dirname since your project uses ES Modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // CDN static assets prevent blank screen rendering failures in Vercel serverless environments
 const SWAGGER_CDN_CSS =
@@ -169,12 +163,12 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: "http://localhost:5002",
-        description: "Local Development Server",
-      },
-      {
         url: "https://gbemileke-backend.vercel.app",
         description: "Vercel Deployment",
+      },
+      {
+        url: "http://localhost:5002",
+        description: "Local Development Server",
       },
     ],
     components: {
@@ -208,18 +202,18 @@ const options: swaggerJSDoc.Options = {
       },
     },
   },
-  // Dynamic path resolution that captures both local .ts files and compiled production .js files
-  apis: [
-    "src/routes/*.ts",
-    "src/**/*.ts",
-    path.join(__dirname, "../routes/*.js"),
-    path.join(__dirname, "../routes/*.ts"),
-    path.join(__dirname, "../**/*.js"),
-    path.join(__dirname, "../**/*.ts"),
-  ],
+  // Safely scan relative globs without throwing path errors on Vercel
+  apis: ["./src/routes/*.ts", "./routes/*.js", "./routes/*.ts", "./dist/routes/*.js"],
 };
 
-const swaggerSpec = swaggerJSDoc(options);
+// Wrap in try-catch so swagger failures NEVER crash the backend server
+let swaggerSpec: any;
+try {
+  swaggerSpec = swaggerJSDoc(options);
+} catch (error) {
+  console.error("Swagger generation failed safely:", error);
+  swaggerSpec = options.definition;
+}
 
 export function setupSwagger(app: Express): void {
   // Serve raw JSON spec endpoint
@@ -228,7 +222,7 @@ export function setupSwagger(app: Express): void {
     res.json(swaggerSpec);
   });
 
-  // Mount the UI interface with custom CDN assets for production stability
+  // Mount the UI interface safely
   app.use(
     "/docs",
     swaggerUi.serve,
@@ -241,5 +235,5 @@ export function setupSwagger(app: Express): void {
     })
   );
 
-  console.log("🏥 Gbemileke Hospital Docs active at: http://localhost:5002/docs");
+  console.log("🏥 Gbemileke Hospital Docs setup complete.");
 }
