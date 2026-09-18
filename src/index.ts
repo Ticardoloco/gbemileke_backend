@@ -8,6 +8,7 @@ import specialitiesRouter from "./routes/specialitiesRoutes.js";
 import patientCardRouter from "./routes/patientCardRoutes.js";
 import productRouter from "./routes/productRoute.js";
 import orderRouter from "./routes/orderRoutes.js";
+import testimonialRouter from "./routes/testmonialRoutes.js"
 import { connectDB } from "./config/database.js";
 
 dotenv.config();
@@ -75,6 +76,7 @@ app.use("/api/bookings", bookRouter);
 app.use("/api/patient-cards", patientCardRouter);
 app.use("/api/products", productRouter);
 app.use("/api/orders", orderRouter);
+app.use("/api/testimonials", testimonialRouter)
 
 // Root route
 app.get("/", (_req, res) => {
