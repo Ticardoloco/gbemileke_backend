@@ -33,7 +33,8 @@ const BookSchema: Schema<IBook> = new Schema<IBook>(
         "bone-setting",
         "infertility",
         "infection-treatment",
-        "general-tradomedical-care"
+        "male-fertility-care",
+        "general-tradomedical-care",
       ],
     },
 
