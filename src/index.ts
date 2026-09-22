@@ -24,7 +24,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       "http://localhost:5002",
       "http://127.0.0.1:5002",
       "https://gbemileke-backend.vercel.app",
-      "https://gbemileke-tradomedical.vercel.app",
+      "https://gbemileketradomedical.vercel.app",
     ];
 
 app.use(
