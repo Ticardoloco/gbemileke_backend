@@ -26,17 +26,24 @@ export async function bookAppointment(req: Request, res: Response) {
     }
 
     // 1. Verify that the patient has an active paid card for this specific specialty
-    const activeCard = await PatientCard.findOne({
+   const card = await PatientCard.findOne({
       patient: req.user._id,
       specialty,
-      isPaid: true,
     });
 
-    if (!activeCard) {
+    if (!card || !card.isPaid) {
       return res.status(403).json({
-        message: `Booking failed. You must have an active registered card for ${specialty} to book an appointment.`,
+        message: `Booking failed. You must have a paid card for ${specialty} to book an appointment.`,
       });
     }
+
+    if (card.isClosed) {
+      return res.status(403).json({
+        message: `Booking failed. Your card for ${specialty} is currently closed. Please reactivate or purchase a new card.`,
+      });
+    }
+
+
 
     const booking = await Book.create({
       patient: req.user._id,

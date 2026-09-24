@@ -4,7 +4,7 @@ import PatientCard, { type MaritalTypes } from "../models/PatientCardModel.js";
 import type { SpecialtySlug } from "../models/specialitiesModel.js";
 
 
-const DEFAULT_CARD_FEE = 10000;
+const DEFAULT_CARD_FEE = 5000;
 
 /**
  * @desc    Initialize Paystack Payment for Patient Card
@@ -43,8 +43,10 @@ export async function initializeCardPayment(req: Request, res: Response) {
     const existingCard = await PatientCard.findOne({
       patient: userId,
       specialty,
+      isPaid: true,
+      isClosed: { $ne: true },
     });
-    if (existingCard?.isPaid) {
+    if (existingCard) {
       return res.status(400).json({
         message: `You already have an active paid patient card for ${specialty}`,
       });
@@ -167,6 +169,12 @@ export async function verifyCardPayment(req: Request, res: Response) {
 
     if (card) {
       card.isPaid = true;
+      card.isClosed = false;
+      card.status = "active"
+
+      card.closedBy = undefined;
+      card.closedAt = undefined;
+      card.closureReason = undefined;
       card.paymentReference = reference;
       if (dateOfBirth) card.dateOfBirth = new Date(dateOfBirth);
       if (maritalStatus) card.maritalStatus = maritalStatus;
@@ -191,6 +199,8 @@ export async function verifyCardPayment(req: Request, res: Response) {
         nextOfKinPhone,
         stateOfOrigin,
         isPaid: true,
+        isClosed: false,
+        status: "active",
         paymentReference: reference,
         cardFee: DEFAULT_CARD_FEE,
       });
@@ -235,7 +245,8 @@ export async function getMyPatientCards(req: Request, res: Response) {
       .populate("patient", "fullName email phoneNumber")
       .populate("history.author", "fullName role")
       .populate("billing.sessions.createdBy", "fullName role")
-      .populate("billing.paymentHistory.recordedBy", "fullName role");
+      .populate("billing.paymentHistory.recordedBy", "fullName role")
+      .populate("closedBy", "fullName role");
       
     return res.status(200).json({
       success: true,
@@ -256,27 +267,22 @@ export async function getMyPatientCards(req: Request, res: Response) {
  */
 export async function getAllPatientCards(req: Request, res: Response) {
   try {
-    const { specialty, isPaid, patientId } = req.query;
+    const { specialty, isPaid, isClosed, patientId } = req.query;
 
     const filter: Record<string, any> = {};
 
-    if (specialty) {
-      filter.specialty = specialty;
-    }
-
-    if (isPaid !== undefined) {
-      filter.isPaid = isPaid === "true";
-    }
-
-    if (patientId) {
-      filter.patient = patientId;
-    }
+    if (specialty) filter.specialty = specialty;
+    if (isPaid !== undefined) filter.isPaid = isPaid === "true";
+    if (isClosed !== undefined) filter.isClosed = isClosed === "true";
+    if (patientId) filter.patient = patientId;
+    
 
     const cards = await PatientCard.find(filter)
       .populate("patient", "fullName email phoneNumber gender avatar")
       .populate("history.author", "fullName role")
       .populate("billing.sessions.createdBy", "fullName role")
       .populate("billing.paymentHistory.recordedBy", "fullName role")
+      .populate("closedBy", "fullName role")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -307,7 +313,8 @@ export async function getPatientCardById(req: Request, res: Response) {
       .populate("patient", "fullName email phoneNumber gender avatar")
       .populate("history.author", "fullName role")
       .populate("billing.sessions.createdBy", "fullName role")
-      .populate("billing.paymentHistory.recordedBy", "fullName role");
+      .populate("billing.paymentHistory.recordedBy", "fullName role")
+      .populate("closedBy", "fullName role");
 
     if (!card) {
       return res.status(404).json({ message: "Patient card not found." });
@@ -414,7 +421,7 @@ export async function addMedicalHistory(req: Request, res: Response) {
 /**
  * @desc    Update Medical History entry
  * @route   PUT /api/patient-cards/:id/history/:historyId
- * @access  Private (Doctor / Admin)
+ * @access  Private (practitonal / admin)
  */
 export async function updateMedicalHistory(req: Request, res: Response) {
   try {
@@ -840,6 +847,57 @@ export async function recordPayment(req: Request, res: Response) {
     });
   }
 }
+
+/**
+ * @desc    Close a Patient Card (Deactivate/Archive) with tracking & reason
+ * @route   PATCH /api/patient-cards/:id/close
+ * @access  Private (Practitioner / Admin)
+ */
+export async function closePatientCard(req: Request, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
+    const { closureReason } = req.body as { closureReason?: string };
+    const closedBy = req.user?._id;
+
+    if (!closedBy) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+
+    const card = await PatientCard.findById(id);
+
+    if (!card) {
+      return res.status(404).json({ message: "Patient card not found." });
+    }
+
+    if (card.isClosed) {
+      return res
+        .status(400)
+        .json({ message: "This patient card is already closed." });
+    }
+
+    // Set closure state matching exact schema properties
+    card.isClosed = true;
+    card.status = "closed";
+    card.closedAt = new Date();
+    card.closedBy = closedBy;
+    if (closureReason) card.closureReason = closureReason.trim();
+
+    await card.save();
+
+    await card.populate("closedBy", "fullName role");
+
+    return res.status(200).json({
+      success: true,
+      message: `Patient card for ${card.specialty} closed successfully.`,
+      card,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Failed to close patient card.",
+      error: error.message,
+    });
+  }
+}
 export default {
   initializeCardPayment,
   verifyCardPayment,
@@ -857,4 +915,5 @@ export default {
   updateTreatmentSession,
   closeTreatmentSession,
   recordPayment,
+  closePatientCard,
 };

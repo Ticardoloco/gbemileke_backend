@@ -15,7 +15,8 @@ import {
   updateTreatmentSession,
   closeTreatmentSession,
   recordPayment,
-  deletePatientCard, // <-- Added controller import
+  deletePatientCard,
+  closePatientCard,
 } from "../controllers/patientCardControllers.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 
@@ -29,7 +30,7 @@ const router = Router();
  */
 
 // ==========================================
-// PATIENT CARD CORE & PAYMENT ROUTES
+// STATIC & CARD INITIALIZATION ROUTES
 // ==========================================
 
 /**
@@ -175,6 +176,14 @@ router.get("/me", protect, getMyPatientCards);
  *         description: Filter cards by payment status
  *         example: true
  *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, closed]
+ *         required: false
+ *         description: Filter cards by operational status
+ *         example: "active"
+ *       - in: query
  *         name: patientId
  *         schema:
  *           type: string
@@ -197,6 +206,10 @@ router.get(
   authorize("practitioner", "admin"),
   getAllPatientCards
 );
+
+// ==========================================
+// PARAMETERIZED PATIENT CARD ROUTES (/:id)
+// ==========================================
 
 /**
  * @openapi
@@ -230,6 +243,54 @@ router.get("/:id", protect, getPatientCardById);
 
 /**
  * @openapi
+ * /api/patient-cards/{id}/close:
+ *   patch:
+ *     summary: Close an active patient card
+ *     tags: [Patient Cards]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Patient Card MongoDB ID
+ *         example: "65a123456789abcdef123456"
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               closureReason:
+ *                 type: string
+ *                 description: Reason for closing the patient card
+ *                 example: "Treatment completed successfully"
+ *     responses:
+ *       200:
+ *         description: Patient card closed successfully
+ *       400:
+ *         description: Patient card is already closed
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden (Requires Medical Staff or Admin role)
+ *       404:
+ *         description: Patient card not found
+ *       500:
+ *         description: Failed to close patient card
+ */
+router.patch(
+  "/:id/close",
+  protect,
+  authorize("practitioner", "admin"),
+  closePatientCard
+);
+
+/**
+ * @openapi
  * /api/patient-cards/{id}:
  *   delete:
  *     summary: Delete a patient card by ID (Admin only)
@@ -259,7 +320,7 @@ router.get("/:id", protect, getPatientCardById);
 router.delete(
   "/:id",
   protect,
-  authorize("admin"), // Restricted to admin role for medical record deletion safety
+  authorize("admin"),
   deletePatientCard
 );
 

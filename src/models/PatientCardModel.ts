@@ -3,7 +3,7 @@ import type { SpecialtySlug } from "./specialitiesModel.js";
 
 export type MaritalTypes = "single" | "married" | "divorced" | "widowed";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
-
+export type CardStatus = "active" | "closed";
 export interface IHistory {
   _id?: Types.ObjectId;
   date: Date;
@@ -54,15 +54,20 @@ export interface IPatientCard extends Document {
   maritalStatus: MaritalTypes;
   nextOfKinName: string;
   nextOfKinPhone: string;
-  stateOfOrigin?: string;
+  stateOfOrigin?: string | undefined;
   specialty: SpecialtySlug;
   history: IHistory[];
   prescriptions: IPrescriptions[];
   billing: IBilling;
   readonly outstandingBalance: number;
   isPaid: boolean;
-  paymentReference?: string;
+  paymentReference?: string | undefined;
   cardFee: number;
+  status: CardStatus;
+  isClosed: boolean;
+  closedAt?: Date | undefined;
+  closedBy?: Types.ObjectId | undefined;
+  closureReason?: string | undefined;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -292,6 +297,28 @@ const PatientCardSchema: Schema<IPatientCard> = new Schema<IPatientCard>(
       type: Number,
       default: 10000,
     },
+    status: {
+      type: String,
+      enum: ["active", "closed"],
+      default: "active",
+      index: true,
+    },
+    isClosed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    closedAt: {
+      type: Date,
+    },
+    closedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    closureReason: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -351,6 +378,7 @@ PatientCardSchema.pre("save", async function () {
 });
 
 PatientCardSchema.index({ patient: 1, specialty: 1 }, { unique: true });
+PatientCardSchema.index({ patient: 1, status: 1 });
 
 export const PatientCard: Model<IPatientCard> =
   mongoose.models.PatientCard ||

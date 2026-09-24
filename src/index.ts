@@ -1,3 +1,7 @@
+// import dns from "dns";
+
+// // Force Node.js to use Google Public DNS for SRV queries
+// dns.setServers(["8.8.8.8", "8.8.4.4"]);
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
