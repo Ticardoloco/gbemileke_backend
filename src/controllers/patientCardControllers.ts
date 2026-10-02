@@ -5,6 +5,7 @@ import type { SpecialtySlug } from "../models/specialitiesModel.js";
 
 
 const DEFAULT_CARD_FEE = 5000;
+const KORA_BASE_URL = process.env["KORA_BASE_URL"] || "https://api.korapay.com/merchant/api/v1";
 
 /**
  * @desc    Initialize Paystack Payment for Patient Card
@@ -15,15 +16,17 @@ const DEFAULT_CARD_FEE = 5000;
 export async function initializeCardPayment(req: Request, res: Response) {
   try {
 
-    const paystackSecretKey = process.env["PAYSTACK_SECRET_KEY"];
+   const koraSecretKey = process.env["KORA_SECRET_KEY"];
 
-    if (!paystackSecretKey) {
+    if (!koraSecretKey) {
       return res.status(500).json({
-        message: "Paystack secret key is missing in environment variables.",
+        message: "Kora secret key is missing in environment variables.",
       });
     }
+
     const userId = req.user?._id;
     const userEmail = req.user?.email;
+    const userName = req.user?.fullName;
     const { specialty } = req.body as {
       specialty: SpecialtySlug;
     };
@@ -52,14 +55,21 @@ export async function initializeCardPayment(req: Request, res: Response) {
       });
     }
 
-    // Call Paystack API
+    const frontendUrl = process.env["FRONTEND_URL"] || "http://localhost:3000";
+    const reference = `TRX_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
 
+    // Call Kora Charge Initialize API
     const response = await axios.post(
-      "https://api.paystack.co/transaction/initialize",
+      `${KORA_BASE_URL}/charge/initialize`,
       {
-        email: userEmail,
-        amount: DEFAULT_CARD_FEE * 100, // Paystack expects amount in Kobo
-        callback_url: `${process.env["FRONTEND_URL"]}/patient-card`,
+        reference,
+        amount: DEFAULT_CARD_FEE, // Kora expects amount in standard Naira (not Kobo)
+        currency: "NGN",
+        redirect_url: `${frontendUrl}/patient-card`,
+        customer: {
+          email: userEmail,
+          name: userName || "Patient",
+        },
         metadata: {
           userId: userId?.toString(),
           specialty,
@@ -68,19 +78,28 @@ export async function initializeCardPayment(req: Request, res: Response) {
       },
       {
         headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
+          Authorization: `Bearer ${koraSecretKey}`,
           "Content-Type": "application/json",
         },
-      },
+      }
     );
 
-    const { authorization_url, reference } = response.data.data;
+   const koraData = response.data;
+
+    if (!koraData.status) {
+      return res.status(400).json({
+        message: koraData.message || "Failed to initialize Kora payment.",
+      });
+    }
+
+    const { checkout_url } = koraData.data;
 
     return res.status(200).json({
       success: true,
-      authorizationUrl: authorization_url,
+      authorizationUrl: checkout_url,
       reference,
     });
+   
   } catch (error: any) {
     return res.status(500).json({
       message: "Failed to initialize payment session.",
@@ -98,11 +117,11 @@ export async function initializeCardPayment(req: Request, res: Response) {
 export async function verifyCardPayment(req: Request, res: Response) {
   try {
 
-    const paystackSecretKey = process.env["PAYSTACK_SECRET_KEY"];
+    const koraSecretKey = process.env["KORA_SECRET_KEY"];
 
-    if (!paystackSecretKey) {
+    if (!koraSecretKey) {
       return res.status(500).json({
-        message: "Paystack secret key is missing in environment variables.",
+        message: "Kora secret key is missing in environment variables.",
       });
     }
     const {
@@ -147,23 +166,22 @@ export async function verifyCardPayment(req: Request, res: Response) {
       });
     }
 
-    // Verify transaction with Paystack
+    // Verify transaction with Kora
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
+      `${KORA_BASE_URL}/charges/${reference}`,
       {
         headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
+          Authorization: `Bearer ${koraSecretKey}`,
         },
-      },
+      }
     );
 
-    const paystackData = response.data.data;
-    if (paystackData.status !== "success") {
+    const koraData = response.data.data;
+    if (!response.data.status || koraData.status !== "success") {
       return res
         .status(400)
-        .json({ message: "Payment verification failed or incomplete." });
+        .json({ message: "Payment verification failed or transaction not successful." });
     }
-
     // Look for existing card for this specific patient + specialty
     let card = await PatientCard.findOne({ patient: userId, specialty });
 

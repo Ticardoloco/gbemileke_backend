@@ -9,25 +9,23 @@ import Order, {
 } from "../models/orderModel.js";
 import Product from "../models/productModel.js";
 import axios from "axios";
-import { authorize } from "../middleware/authMiddleware.js";
 
+const KORA_BASE_URL = process.env["KORA_BASE_URL"] || "https://api.korapay.com/merchant/api/v1";
 // Type definition for Paystack's external API response
-interface PaystackInitResponse {
+interface KoraInitResponse {
   status: boolean;
   message: string;
   data: {
-    authorization_url: string;
-    access_code: string;
+    checkout_url: string;
     reference: string;
   };
 }
-
 /**
  * Helper to calculate automated delivery fee based on region and order total
  */
 function calculateDeliveryFee(state: string, itemsPrice: number): number {
-  // Free delivery threshold (e.g., free shipping for orders ₦20,000 and above)
-  if (itemsPrice >= 200000) {
+  // Free delivery threshold (e.g., free shipping for orders ₦500,000 and above)
+  if (itemsPrice >= 500000) {
     return 0;
   }
 
@@ -86,21 +84,39 @@ function calculateDeliveryFee(state: string, itemsPrice: number): number {
 /**
  * Helper to initialize Paystack transaction
  */
-async function initializePaystackTransaction(
+async function initializeKoraTransaction(
   email: string,
-  amountInKobo: number
+  name: string,
+  amountInNaira: number
 ) {
   try {
-    const response = await axios.post<PaystackInitResponse>(
-      "https://api.paystack.co/transaction/initialize",
+
+    const koraSecretKey = process.env["KORA_SECRET_KEY"];
+
+    if (!koraSecretKey) {
+      throw new Error("Kora secret key is missing in environment variables.");
+    }
+
+    const reference = `ORD_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+
+    const response = await axios.post<KoraInitResponse>(
+      `${KORA_BASE_URL}/charge/initialize`,
       {
-        email,
-        amount: Math.round(amountInKobo),
-        callback_url: `${process.env["FRONTEND_URL"]}/my-orders`,
+        reference,
+        amount: Math.round(amountInNaira), // Kora uses standard currency units
+        currency: "NGN",
+        redirect_url: `${process.env["FRONTEND_URL"]}/my-orders`,
+        customer: {
+          email,
+          name: name || "Customer",
+        },
+        metadata: {
+          paymentType: "ORDER_CHECKOUT",
+        },
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env["PAYSTACK_SECRET_KEY"]}`,
+          Authorization: `Bearer ${koraSecretKey}`,
           "Content-Type": "application/json",
         },
       }
@@ -108,7 +124,7 @@ async function initializePaystackTransaction(
 
     if (!response.data.status) {
       throw new Error(
-        response.data.message || "Paystack initialization failed."
+        response.data.message || "Korapay transaction initialization failed."
       );
     }
 
@@ -158,6 +174,7 @@ export async function createOrder(req: Request, res: Response) {
 
     const userId = req.user?._id;
     const userEmail = req.user?.email;
+    const userName = req.user?.fullName;
 
     if (!userId || !userEmail) {
       return res.status(401).json({
@@ -224,9 +241,10 @@ export async function createOrder(req: Request, res: Response) {
       });
     }
 
-    const paystackData = await initializePaystackTransaction(
+    const koraData = await initializeKoraTransaction(
       userEmail,
-      totalAmount * 100
+      userName || shippingAddress.fullName,
+      totalAmount
     );
 
     const order = await Order.create({
@@ -244,12 +262,11 @@ export async function createOrder(req: Request, res: Response) {
       deliveryFee: calculatedDeliveryFee,
       totalAmount,
       paymentInfo: {
-        paymentMethod: paymentInfo?.paymentMethod || "paystack",
-        reference: paystackData.reference,
-        accessCode: paystackData.access_code,
-        authorizationUrl: paystackData.authorization_url,
+        paymentMethod: paymentInfo?.paymentMethod || "korapay",
+        reference: koraData.reference,
+        authorizationUrl: koraData.checkout_url,
         currency: "NGN",
-        paystackStatus: "pending",
+        koraStatus: "pending", // Kept field name for schema compatibility
       },
     });
 
@@ -257,9 +274,8 @@ export async function createOrder(req: Request, res: Response) {
       success: true,
       data: {
         order,
-        authorizationUrl: paystackData.authorization_url,
-        accessCode: paystackData.access_code,
-        reference: paystackData.reference,
+        authorizationUrl: koraData.checkout_url,
+        reference: koraData.reference,
       },
     });
   } catch (error: any) {
@@ -536,24 +552,27 @@ export async function cancelOrder(req: Request, res: Response) {
         });
       }
 
-      // Handle Paystack Refund if the order was already paid
+      // Handle Kora Refund
       if (order.paymentInfo?.reference) {
         try {
-          await axios.post(
-            "https://api.paystack.co/refund",
-            {
-              transaction: order.paymentInfo.reference,
-              customer_note: cancellationReason || "Customer requested order cancellation.",
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-                "Content-Type": "application/json",
+          const koraSecretKey = process.env["KORA_SECRET_KEY"];
+          if (koraSecretKey) {
+            await axios.post(
+              `${KORA_BASE_URL}/transactions/refund`,
+              {
+                reference: order.paymentInfo.reference,
+                reason: cancellationReason || "Customer requested order cancellation.",
               },
-            }
-          );
+              {
+                headers: {
+                  Authorization: `Bearer ${koraSecretKey}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+          }
         } catch (refundError: any) {
-          console.error("Paystack refund initiation failed:", refundError.response?.data || refundError.message);
+          console.error("Kora refund initiation failed:", refundError.response?.data || refundError.message);
         }
       }
     }
@@ -630,65 +649,46 @@ export async function deleteOrder(req: Request, res: Response) {
   }
 }
 
-/**
- * @desc    Paystack Webhook Handler (Auto-confirms payment on charge.success)
- * @route   POST /api/orders/webhook/paystack
- * @access  Public (Validated via Paystack Signature)
- */
-export async function handlePaystackWebhook(req: Request, res: Response) {
+export const handleKoraWebhook = async (req: any, res: any) => {
   try {
-    const secret = process.env["PAYSTACK_SECRET_KEY"];
-    const signature = req.headers["x-paystack-signature"];
+    // 1. Fetch signature header
+    const signature = req.headers["x-korapay-signature"] || req.headers["x-kora-signature"];
 
-    if (!secret || !signature) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing secret key or signature header",
-      });
+    if (!signature) {
+      return res.status(400).json({ message: "Missing x-korapay-signature header" });
     }
 
-    // Use rawBody buffer attached by express.json({ verify: ... }) in index.ts
-    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    // 2. Compute expected HMAC SHA-256 signature using req.rawBody
+    
+    // 3. Parse payload safely (req.body is already a parsed JSON object now!)
+    const { event, data } = req.body;
 
-    const hash = crypto
-      .createHmac("sha512", secret)
-      .update(rawBody)
-      .digest("hex");
+    if (event === "charge.success") {
+      const orderReference = data.reference;
+      const paymentMethod = data.payment_method || "korapay";
 
-    if (hash !== signature) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid signature",
-      });
-    }
+      if (orderReference) {
+        const order = await Order.findOne({ "paymentInfo.reference": orderReference });
 
-    const event = req.body;
+        if (order && !order.isPaid) {
+          await order.markAsPaid(orderReference, paymentMethod, "Successful");
 
-    if (event.event === "charge.success") {
-      const { reference, channel, gateway_response } = event.data;
-
-      const order = await Order.findOne({ "paymentInfo.reference": reference });
-
-      if (order && !order.isPaid) {
-        await order.markAsPaid(reference, channel, gateway_response);
-
-        for (const item of order.orderItems) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: -item.quantity }, 
-      });
-    }
+          for (const item of order.orderItems) {
+            await Product.findByIdAndUpdate(item.product, {
+              $inc: { stock: -item.quantity },
+            });
+          }
+        }
       }
+      
     }
 
     return res.status(200).json({ status: "success" });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: "Webhook processing error",
-      error: error.message,
-    });
+    console.error("Kora Webhook Error:", error);
+    return res.status(500).json({ message: error.message });
   }
-}
+};
 export default {
   createOrder,
   getOrderById,
@@ -698,5 +698,5 @@ export default {
   updateOrderStatus,
   cancelOrder,
   deleteOrder,
-  handlePaystackWebhook,
+  handleKoraWebhook,
 };

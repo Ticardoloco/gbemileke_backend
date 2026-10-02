@@ -18,14 +18,14 @@ export interface IShippingAddress {
 }
 
 export interface IPaymentDetails {
-  paymentMethod: "paystack" | "card" | "bank_transfer";
+  paymentMethod: "korapay" | "card" | "bank_transfer";
   reference?: string;
   accessCode?: string;
   authorizationUrl?: string;
   channel?: string;
   currency: string;
   paidAt?: Date;
-  paystackStatus?: string;
+  koraStatus?: string;
   gatewayResponse?: string;
 }
 
@@ -133,8 +133,8 @@ const paymentDetailsSchema = new Schema<IPaymentDetails>(
   {
     paymentMethod: {
       type: String,
-      enum: ["paystack", "card", "bank_transfer"],
-      default: "paystack",
+      enum: ["korapay", "card", "bank_transfer"],
+      default: "korapay",
       required: true,
     },
     reference: {
@@ -149,7 +149,7 @@ const paymentDetailsSchema = new Schema<IPaymentDetails>(
     channel: { type: String, trim: true },
     currency: { type: String, default: "NGN", uppercase: true },
     paidAt: { type: Date },
-    paystackStatus: { type: String, trim: true, default: "pending" },
+    koraStatus: { type: String, trim: true, default: "pending" },
     gatewayResponse: { type: String, trim: true },
   },
   { _id: false },
@@ -252,7 +252,7 @@ OrderSchema.methods.markAsPaid = function (
   this.orderStatus = "processing";
   this.paymentInfo.reference = reference;
   this.paymentInfo.paidAt = new Date();
-  this.paymentInfo.paystackStatus = "success";
+  this.paymentInfo.koraStatus = "success";
   if (channel) this.paymentInfo.channel = channel;
   if (gatewayResponse) this.paymentInfo.gatewayResponse = gatewayResponse;
 
